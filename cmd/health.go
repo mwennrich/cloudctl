@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/fi-ts/cloud-go/api/client/health"
-	"github.com/fi-ts/cloudctl/cmd/output"
+	"github.com/mwennrich/cloudctl/cmd/output"
 	"github.com/spf13/cobra"
 )
 

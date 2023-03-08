@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/fi-ts/cloud-go/api/models"
-	"github.com/fi-ts/cloudctl/cmd/helper"
+	"github.com/mwennrich/cloudctl/cmd/helper"
 )
 
 type (

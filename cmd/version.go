@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/fi-ts/cloudctl/cmd/output"
-	"github.com/fi-ts/cloudctl/pkg/api"
 	"github.com/metal-stack/v"
+	"github.com/mwennrich/cloudctl/cmd/output"
+	"github.com/mwennrich/cloudctl/pkg/api"
 	"github.com/spf13/cobra"
 )
 
