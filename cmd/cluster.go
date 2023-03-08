@@ -22,6 +22,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/fi-ts/cloud-go/api/client/cluster"
+	"github.com/google/uuid"
 	"github.com/gosimple/slug"
 	"github.com/metal-stack/metal-lib/auth"
 	"github.com/metal-stack/metal-lib/pkg/pointer"
@@ -1825,6 +1826,15 @@ func (c *config) clusterID(verb string, args []string) (string, error) {
 		return "", fmt.Errorf("cluster %s requires clusterID as argument", verb)
 	}
 	if len(args) == 1 {
+		_, err := uuid.Parse(args[0])
+		if err != nil {
+			cfr := &models.V1ClusterFindRequest{Name: &args[0]}
+			response, err := c.cloud.Cluster.FindClusters(cluster.NewFindClustersParams().WithBody(cfr), nil)
+			if err != nil || len(response.Payload) != 1 {
+				return "", fmt.Errorf("cluster %s not found", args[0])
+			}
+			return *response.Payload[0].ID, nil
+		}
 		return args[0], nil
 	}
 	return "", fmt.Errorf("cluster %s requires exactly one clusterID as argument", verb)
