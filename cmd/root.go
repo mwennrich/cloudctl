@@ -9,8 +9,8 @@ import (
 
 	cloudgo "github.com/fi-ts/cloud-go"
 	"github.com/fi-ts/cloud-go/api/client"
-	"github.com/fi-ts/cloudctl/cmd/completion"
-	"github.com/fi-ts/cloudctl/pkg/api"
+	"github.com/mwennrich/cloudctl/cmd/completion"
+	"github.com/mwennrich/cloudctl/pkg/api"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

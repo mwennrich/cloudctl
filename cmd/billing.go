@@ -6,10 +6,10 @@ import (
 
 	"github.com/fi-ts/cloud-go/api/client/accounting"
 	"github.com/fi-ts/cloud-go/api/models"
-	"github.com/fi-ts/cloudctl/cmd/output"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/jinzhu/now"
+	"github.com/mwennrich/cloudctl/cmd/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
