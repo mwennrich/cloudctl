@@ -1822,22 +1822,27 @@ func portOpen(ip string, port string, timeout time.Duration) bool {
 }
 
 func (c *config) clusterID(verb string, args []string) (string, error) {
-	if len(args) == 0 {
-		return "", fmt.Errorf("cluster %s requires clusterID as argument", verb)
+	if len(args) != 1 {
+		return "", fmt.Errorf("cluster %s requires exactly one clusterID as argument", verb)
 	}
-	if len(args) == 1 {
-		_, err := uuid.Parse(args[0])
+
+	// if the argument is a cluster name, find the cluster by name
+	_, err := uuid.Parse(args[0])
+	if err != nil {
+		cfr := &models.V1ClusterFindRequest{Name: &args[0]}
+		response, err := c.cloud.Cluster.FindClusters(cluster.NewFindClustersParams().WithBody(cfr), nil)
 		if err != nil {
-			cfr := &models.V1ClusterFindRequest{Name: &args[0]}
-			response, err := c.cloud.Cluster.FindClusters(cluster.NewFindClustersParams().WithBody(cfr), nil)
-			if err != nil || len(response.Payload) != 1 {
-				return "", fmt.Errorf("cluster %s not found", args[0])
-			}
-			return *response.Payload[0].ID, nil
+			return "", fmt.Errorf("error finding cluster %s: %s", args[0], err)
 		}
-		return args[0], nil
+		if len(response.Payload) != 1 {
+			return "", fmt.Errorf("cluster %s not found", args[0])
+		}
+		// return the cluster ID
+		return *response.Payload[0].ID, nil
 	}
-	return "", fmt.Errorf("cluster %s requires exactly one clusterID as argument", verb)
+
+	// if the argument is a cluster ID, return the argument
+	return args[0], nil
 }
 
 func makeEgressRules(egressFlagValue []string) []*models.V1EgressRule {
