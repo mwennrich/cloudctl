@@ -1280,6 +1280,7 @@ func (c *config) clusterDescribe(args []string) error {
 	if err != nil {
 		return err
 	}
+	viper.Set("output-format", "yaml")
 	return output.New().Print(shoot.Payload)
 }
 
