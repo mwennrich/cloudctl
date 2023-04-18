@@ -341,7 +341,7 @@ func newClusterCmd(c *config) *cobra.Command {
 			cobra.ShellCompDirectiveNoFileComp
 	}))
 
-	clusterDescribeCmd.Flags().Bool("no-machines", false, "does not return in the output")
+	clusterDescribeCmd.Flags().Bool("show-machines", false, "does not return machines in the output")
 
 	// Cluster list --------------------------------------------------------------------
 	clusterListCmd.Flags().String("id", "", "show clusters of given id")
@@ -1273,13 +1273,14 @@ func (c *config) clusterDescribe(args []string) error {
 	}
 	findRequest := cluster.NewFindClusterParams()
 	findRequest.SetID(ci)
-	if viper.GetBool("no-machines") {
+	if !viper.GetBool("show-machines") {
 		findRequest.WithReturnMachines(pointer.Pointer(false))
 	}
 	shoot, err := c.cloud.Cluster.FindCluster(findRequest, nil)
 	if err != nil {
 		return err
 	}
+	viper.Set("output-format", "yaml")
 	return output.New().Print(shoot.Payload)
 }
 
