@@ -1099,6 +1099,8 @@ func (s VolumeTablePrinter) Order(data []*models.V1VolumeResponse) {
 			sizeB := B.Size
 			usageA := A.Statistics.LogicalUsedStorage
 			usageB := B.Statistics.LogicalUsedStorage
+			phyiscalUsageA := A.Statistics.PhysicalUsedStorage
+			phyiscalUsageB := B.Statistics.PhysicalUsedStorage
 			for _, order := range cols {
 				order = strings.ToLower(order)
 				switch order {
@@ -1126,6 +1128,19 @@ func (s VolumeTablePrinter) Order(data []*models.V1VolumeResponse) {
 						return true
 					}
 					if *usageA != *usageB {
+						return false
+					}
+				case "physicalusage":
+					if A.Statistics == nil || A.Statistics.PhysicalUsedStorage == nil {
+						return true
+					}
+					if B.Statistics == nil || B.Statistics.PhysicalUsedStorage == nil {
+						return false
+					}
+					if *phyiscalUsageA < *phyiscalUsageB {
+						return true
+					}
+					if *phyiscalUsageA != *phyiscalUsageB {
 						return false
 					}
 				}

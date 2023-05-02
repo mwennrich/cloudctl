@@ -27,7 +27,7 @@ type (
 
 // Print an volume as table
 func (p VolumeTablePrinter) Print(data []*models.V1VolumeResponse) {
-	p.shortHeader = []string{"ID", "Name", "Size", "Usage", "Replicas", "StorageClass", "Project", "Tenant", "Partition"}
+	p.shortHeader = []string{"ID", "Name", "Size", "Usage", "PhysicalUsage", "StorageClass", "Project", "Tenant", "Partition"}
 	p.wideHeader = append(p.shortHeader, "Nodes")
 	p.Order(data)
 
@@ -48,9 +48,9 @@ func (p VolumeTablePrinter) Print(data []*models.V1VolumeResponse) {
 		if vol.Statistics != nil && vol.Statistics.LogicalUsedStorage != nil {
 			usage = humanize.IBytes(uint64(*vol.Statistics.LogicalUsedStorage))
 		}
-		replica := ""
-		if vol.ReplicaCount != nil {
-			replica = fmt.Sprintf("%d", *vol.ReplicaCount)
+		physicalUsage := ""
+		if vol.Statistics != nil && vol.Statistics.PhysicalUsedStorage != nil {
+			physicalUsage = humanize.IBytes(uint64(*vol.Statistics.PhysicalUsedStorage))
 		}
 		sc := ""
 		if vol.StorageClass != nil {
@@ -71,7 +71,7 @@ func (p VolumeTablePrinter) Print(data []*models.V1VolumeResponse) {
 
 		nodes := ConnectedHosts(vol)
 
-		short := []string{volumeID, name, size, usage, replica, sc, project, tenant, partition}
+		short := []string{volumeID, name, size, usage, physicalUsage, sc, project, tenant, partition}
 		wide := append(short, strings.Join(nodes, "\n"))
 
 		p.addWideData(wide, vol)
