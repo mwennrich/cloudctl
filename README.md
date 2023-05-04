@@ -33,17 +33,17 @@ Commandline client for "Kubernetes as a Service" and more!
 
 Download locations:
 
-- [cloudctl-linux-amd64](https://github.com/mwennrich/cloudctl/releases/latest/download/cloudctl-linux-amd64)
-- [cloudctl-darwin-amd64](https://github.com/mwennrich/cloudctl/releases/latest/download/cloudctl-darwin-amd64)
-- [cloudctl-darwin-arm64](https://github.com/mwennrich/cloudctl/releases/latest/download/cloudctl-darwin-arm64)
-- [cloudctl-windows-amd64](https://github.com/mwennrich/cloudctl/releases/latest/download/cloudctl-windows-amd64)
+- [cloudctl-linux-amd64](https://github.com/fi-ts/cloudctl/releases/latest/download/cloudctl-linux-amd64)
+- [cloudctl-darwin-amd64](https://github.com/fi-ts/cloudctl/releases/latest/download/cloudctl-darwin-amd64)
+- [cloudctl-darwin-arm64](https://github.com/fi-ts/cloudctl/releases/latest/download/cloudctl-darwin-arm64)
+- [cloudctl-windows-amd64](https://github.com/fi-ts/cloudctl/releases/latest/download/cloudctl-windows-amd64)
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/fits-cloudctl.svg)](https://repology.org/project/fits-cloudctl/versions)
 
 ### Installation on Linux
 
 ```bash
-curl -LO https://github.com/mwennrich/cloudctl/releases/latest/download/cloudctl-linux-amd64
+curl -LO https://github.com/fi-ts/cloudctl/releases/latest/download/cloudctl-linux-amd64
 chmod +x cloudctl-linux-amd64
 sudo mv cloudctl-linux-amd64 /usr/local/bin/cloudctl
 ```
@@ -53,7 +53,7 @@ sudo mv cloudctl-linux-amd64 /usr/local/bin/cloudctl
 For x86 based Macs:
 
 ```bash
-curl -LO https://github.com/mwennrich/cloudctl/releases/latest/download/cloudctl-darwin-amd64
+curl -LO https://github.com/fi-ts/cloudctl/releases/latest/download/cloudctl-darwin-amd64
 chmod +x cloudctl-darwin-amd64
 sudo mv cloudctl-darwin-amd64 /usr/local/bin/cloudctl
 ```
@@ -61,7 +61,7 @@ sudo mv cloudctl-darwin-amd64 /usr/local/bin/cloudctl
 For Apple Silicon (M1) based Macs:
 
 ```bash
-curl -LO https://github.com/mwennrich/cloudctl/releases/latest/download/cloudctl-darwin-arm64
+curl -LO https://github.com/fi-ts/cloudctl/releases/latest/download/cloudctl-darwin-arm64
 chmod +x cloudctl-darwin-arm64
 sudo mv cloudctl-darwin-arm64 /usr/local/bin/cloudctl
 ```
@@ -81,7 +81,7 @@ The package can also be installed eg. with `nix-env -i fits-cloudctl`.
 ### Installation on Windows
 
 ```bash
-curl -LO https://github.com/mwennrich/cloudctl/releases/latest/download/cloudctl-windows-amd64
+curl -LO https://github.com/fi-ts/cloudctl/releases/latest/download/cloudctl-windows-amd64
 copy cloudctl-windows-amd64 cloudctl.exe
 ```
 

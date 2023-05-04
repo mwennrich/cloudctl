@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/mwennrich/cloudctl/cmd"
+	"github.com/fi-ts/cloudctl/cmd"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-module github.com/mwennrich/cloudctl
+module github.com/fi-ts/cloudctl
 
 go 1.20
 

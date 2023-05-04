@@ -7,8 +7,8 @@ import (
 
 	"github.com/fi-ts/cloud-go/api/client/database"
 	"github.com/fi-ts/cloud-go/api/models"
-	"github.com/mwennrich/cloudctl/cmd/helper"
-	"github.com/mwennrich/cloudctl/cmd/output"
+	"github.com/fi-ts/cloudctl/cmd/helper"
+	"github.com/fi-ts/cloudctl/cmd/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"

@@ -12,8 +12,8 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/fi-ts/cloud-go/api/client/cluster"
 	"github.com/fi-ts/cloud-go/api/models"
+	"github.com/fi-ts/cloudctl/pkg/api"
 	"github.com/metal-stack/metal-lib/pkg/pointer"
-	"github.com/mwennrich/cloudctl/pkg/api"
 	"github.com/spf13/viper"
 
 	"github.com/olekukonko/tablewriter"

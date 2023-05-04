@@ -6,7 +6,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/fi-ts/cloud-go/api/models"
-	"github.com/mwennrich/cloudctl/cmd/helper"
+	"github.com/fi-ts/cloudctl/cmd/helper"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8syaml "sigs.k8s.io/yaml"
