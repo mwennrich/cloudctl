@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/fatih/color"
-	"github.com/mwennrich/cloudctl/cmd/output"
-	"github.com/mwennrich/cloudctl/pkg/api"
+	"github.com/fi-ts/cloudctl/cmd/output"
+	"github.com/fi-ts/cloudctl/pkg/api"
 	"github.com/spf13/cobra"
 )
 

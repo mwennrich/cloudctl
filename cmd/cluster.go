@@ -28,10 +28,10 @@ import (
 	"github.com/metal-stack/metal-lib/pkg/pointer"
 
 	"github.com/fi-ts/cloud-go/api/models"
-	"github.com/mwennrich/cloudctl/cmd/completion"
-	"github.com/mwennrich/cloudctl/cmd/helper"
-	"github.com/mwennrich/cloudctl/cmd/output"
-	"github.com/mwennrich/cloudctl/pkg/api"
+	"github.com/fi-ts/cloudctl/cmd/completion"
+	"github.com/fi-ts/cloudctl/cmd/helper"
+	"github.com/fi-ts/cloudctl/cmd/output"
+	"github.com/fi-ts/cloudctl/pkg/api"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/cobra"
