@@ -10,13 +10,20 @@ import (
 	"github.com/fi-ts/cloud-go/api/client/s3"
 	"github.com/fi-ts/cloud-go/api/client/tenant"
 	"github.com/fi-ts/cloud-go/api/client/volume"
+	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/pkg/api"
 	"github.com/metal-stack/metal-lib/pkg/pointer"
 	"github.com/spf13/cobra"
 )
 
 var (
-	ClusterPurposes = []string{"production", "development", "evaluation", "infrastructure"}
+	ClusterPurposes     = []string{"production", "development", "evaluation", "infrastructure"}
+	PodSecurityDefaults = []string{
+		models.V1KubernetesDefaultPodSecurityStandardRestricted,
+		models.V1KubernetesDefaultPodSecurityStandardBaseline,
+		models.V1KubernetesDefaultPodSecurityStandardPrivileged,
+		models.V1KubernetesDefaultPodSecurityStandardEmpty,
+	}
 )
 
 type Completion struct {
@@ -80,6 +87,21 @@ func (c *Completion) ClusterFirewallListCompletion(cmd *cobra.Command, args []st
 
 func (c *Completion) ClusterPurposeListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	return ClusterPurposes, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (c *Completion) PodSecurityListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return PodSecurityDefaults, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (c *Completion) ClusterReconcileOperationCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	operations := []string{
+		models.V1ClusterReconcileRequestOperationReconcile + "\tdefault reconcile",
+		models.V1ClusterReconcileRequestOperationRetry + "\ttrigger a retry reconciliation",
+		models.V1ClusterReconcileRequestOperationMaintain + "\ttrigger a maintenance reconciliation",
+		models.V1ClusterReconcileRequestOperationRotateDashSSHDashKeypair + "\ttrigger ssh keypair rotation",
+	}
+
+	return operations, cobra.ShellCompDirectiveNoFileComp
 }
 
 func (c *Completion) clusterMachineListCompletion(clusterIDs []string, includeMachines bool) ([]string, cobra.ShellCompDirective) {
