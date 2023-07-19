@@ -301,7 +301,8 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().StringSlice("labels", []string{}, "labels of the cluster")
 	clusterCreateCmd.Flags().StringSlice("external-networks", []string{}, "external networks of the cluster")
 	clusterCreateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <network>:<ip>; e.g.: --egress internet:1.2.3.4,extnet:123.1.1.1 --egress internet:1.2.3.5 [optional]")
-	clusterCreateCmd.Flags().BoolP("allowprivileged", "", false, "allow privileged containers the cluster.")
+	clusterCreateCmd.Flags().BoolP("allowprivileged", "", false, "allow privileged containers the cluster (this is achieved through pod security policies and has no effect anymore on clusters >= v1.25")
+	clusterCreateCmd.Flags().String("default-pod-security-standard", "", "sets default pod security standard for clusters >= v1.23.x, defaults to restricted on clusters >= v1.25 (valid values: empty string, privileged, baseline, restricted)")
 	clusterCreateCmd.Flags().String("audit", "on", "audit logging of cluster API access; can be off, on (default) or splunk (logging to a predefined or custom splunk endpoint). [optional]")
 	clusterCreateCmd.Flags().Duration("healthtimeout", 0, "period (e.g. \"24h\") after which an unhealthy node is declared failed and will be replaced. [optional]")
 	clusterCreateCmd.Flags().Duration("draintimeout", 0, "period (e.g. \"3h\") after which a draining node will be forcefully deleted. [optional]")
@@ -327,6 +328,7 @@ func newClusterCmd(c *config) *cobra.Command {
 	must(clusterCreateCmd.RegisterFlagCompletionFunc("firewallimage", c.comp.FirewallImageListCompletion))
 	must(clusterCreateCmd.RegisterFlagCompletionFunc("firewallcontroller", c.comp.FirewallControllerVersionListCompletion))
 	must(clusterCreateCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
+	must(clusterCreateCmd.RegisterFlagCompletionFunc("default-pod-security-standard", c.comp.PodSecurityListCompletion))
 	must(clusterCreateCmd.RegisterFlagCompletionFunc("cri", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"docker", "containerd"}, cobra.ShellCompDirectiveNoFileComp
 	}))
@@ -379,7 +381,8 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().String("machineimage", "", "machine image to use for the nodes, must be in the form of <name>-<version> ")
 	clusterUpdateCmd.Flags().StringSlice("addlabels", []string{}, "labels to add to the cluster")
 	clusterUpdateCmd.Flags().StringSlice("removelabels", []string{}, "labels to remove from the cluster")
-	clusterUpdateCmd.Flags().BoolP("allowprivileged", "", false, "allow privileged containers the cluster, please add --yes-i-really-mean-it")
+	clusterUpdateCmd.Flags().BoolP("allowprivileged", "", false, "allow privileged containers the cluster (this is achieved through pod security policies and has no effect anymore on clusters >=v1.25")
+	clusterUpdateCmd.Flags().String("default-pod-security-standard", "", "set default pod security standard for cluster >=v 1.23.x, send empty string explicitly to disable pod security standards (valid values: empty string, privileged, baseline, restricted)")
 	clusterUpdateCmd.Flags().String("audit", "on", "audit logging of cluster API access; can be off, on or splunk (logging to a predefined or custom splunk endpoint).")
 	clusterUpdateCmd.Flags().String("purpose", "", fmt.Sprintf("purpose of the cluster, can be one of %s. SLA is only given on production clusters.", strings.Join(completion.ClusterPurposes, "|")))
 	clusterUpdateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <networkid>:<semicolon-separated ips>; e.g.: --egress internet:1.2.3.4;1.2.3.5 --egress extnet:123.1.1.1 [optional]. Use --egress none to remove all egress rules.")
@@ -404,6 +407,7 @@ func newClusterCmd(c *config) *cobra.Command {
 	must(clusterUpdateCmd.RegisterFlagCompletionFunc("machinetype", c.comp.MachineTypeListCompletion))
 	must(clusterUpdateCmd.RegisterFlagCompletionFunc("machineimage", c.comp.MachineImageListCompletion))
 	must(clusterUpdateCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
+	must(clusterUpdateCmd.RegisterFlagCompletionFunc("default-pod-security-standard", c.comp.PodSecurityListCompletion))
 	must(clusterUpdateCmd.RegisterFlagCompletionFunc("audit", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return auditConfigOptions.Names(true),
 			cobra.ShellCompDirectiveNoFileComp
@@ -466,8 +470,8 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterMachineCmd.AddCommand(clusterMachineReinstallCmd)
 	clusterMachineCmd.AddCommand(clusterMachinePackagesCmd)
 
-	clusterReconcileCmd.Flags().Bool("retry", false, "Executes a cluster \"retry\" operation instead of regular \"reconcile\".")
-	clusterReconcileCmd.Flags().Bool("maintain", false, "Executes a cluster \"maintain\" operation instead of regular \"reconcile\".")
+	clusterReconcileCmd.Flags().String("operation", models.V1ClusterReconcileRequestOperationReconcile, "Executes a cluster \"reconcile\" operation.")
+	must(clusterReconcileCmd.RegisterFlagCompletionFunc("operation", c.comp.ClusterReconcileOperationCompletion))
 
 	clusterIssuesCmd.Flags().String("id", "", "show clusters of given id")
 	clusterIssuesCmd.Flags().String("name", "", "show clusters of given name")
@@ -530,7 +534,15 @@ func (c *config) clusterCreate() error {
 	healthtimeout := viper.GetDuration("healthtimeout")
 	draintimeout := viper.GetDuration("draintimeout")
 
-	allowprivileged := viper.GetBool("allowprivileged")
+	var allowprivileged *bool
+	if viper.IsSet("allowprivileged") {
+		allowprivileged = pointer.Pointer(viper.GetBool("allowprivileged"))
+	}
+	var defaultPodSecurityStandard *string
+	if viper.IsSet("default-pod-security-standard") {
+		defaultPodSecurityStandard = pointer.Pointer(viper.GetString("default-pod-security-standard"))
+	}
+
 	audit := viper.GetString("audit")
 
 	labels := viper.GetStringSlice("labels")
@@ -631,8 +643,9 @@ func (c *config) clusterCreate() error {
 		FirewallImage:             &firewallImage,
 		FirewallControllerVersion: &firewallController,
 		Kubernetes: &models.V1Kubernetes{
-			AllowPrivilegedContainers: &allowprivileged,
-			Version:                   &version,
+			AllowPrivilegedContainers:  allowprivileged,
+			Version:                    &version,
+			DefaultPodSecurityStandard: defaultPodSecurityStandard,
 		},
 		Audit: auditConfig.Config,
 		Maintenance: &models.V1Maintenance{
@@ -865,20 +878,8 @@ func (c *config) reconcileCluster(args []string) error {
 	request := cluster.NewReconcileClusterParams()
 	request.SetID(ci)
 
-	if helper.ViperBool("retry") != nil && helper.ViperBool("maintain") != nil {
-		return fmt.Errorf("--retry and --maintain are mutually exclusive")
-	}
-
-	var operation *string
-	if viper.GetBool("retry") {
-		o := "retry"
-		operation = &o
-	}
-	if viper.GetBool("maintain") {
-		o := "maintain"
-		operation = &o
-	}
-	request.Body = &models.V1ClusterReconcileRequest{Operation: operation}
+	operation := viper.GetString("operation")
+	request.Body = &models.V1ClusterReconcileRequest{Operation: &operation}
 
 	shoot, err := c.cloud.Cluster.ReconcileCluster(request, nil)
 	if err != nil {
@@ -892,6 +893,7 @@ func (c *config) updateCluster(args []string) error {
 	if err != nil {
 		return err
 	}
+
 	workergroupname := viper.GetString("workergroup")
 	removeworkergroup := viper.GetBool("remove-workergroup")
 	workerlabelslice := viper.GetStringSlice("workerlabels")
@@ -1211,11 +1213,17 @@ func (c *config) updateCluster(args []string) error {
 	}
 	if viper.IsSet("allowprivileged") {
 		if !viper.GetBool("yes-i-really-mean-it") {
-			return fmt.Errorf("allowprivileged is set but you forgot to add --yes-i-really-mean-it")
+			return fmt.Errorf("--allowprivileged is set but you forgot to add --yes-i-really-mean-it")
 		}
-		allowPrivileged := viper.GetBool("allowprivileged")
-		k8s.AllowPrivilegedContainers = &allowPrivileged
+		k8s.AllowPrivilegedContainers = pointer.Pointer(viper.GetBool("allowprivileged"))
 	}
+	if viper.IsSet("default-pod-security-standard") {
+		if !viper.GetBool("yes-i-really-mean-it") {
+			return fmt.Errorf("--default-pod-security-standard is set but you forgot to add --yes-i-really-mean-it")
+		}
+		k8s.DefaultPodSecurityStandard = pointer.Pointer(viper.GetString("default-pod-security-standard"))
+	}
+
 	cur.Kubernetes = k8s
 
 	if viper.IsSet("audit") {
