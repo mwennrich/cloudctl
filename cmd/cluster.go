@@ -307,7 +307,6 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().Duration("healthtimeout", 0, "period (e.g. \"24h\") after which an unhealthy node is declared failed and will be replaced. [optional]")
 	clusterCreateCmd.Flags().Duration("draintimeout", 0, "period (e.g. \"3h\") after which a draining node will be forcefully deleted. [optional]")
 	clusterCreateCmd.Flags().Bool("encrypted-storage-classes", false, "enables the deployment of encrypted duros storage classes into the cluster. please refer to the user manual to properly use volume encryption. [optional]")
-	clusterCreateCmd.Flags().BoolP("reversed-vpn", "", false, "enables usage of reversed-vpn instead of konnectivity tunnel for worker connectivity. [optional]")
 	clusterCreateCmd.Flags().BoolP("autoupdate-kubernetes", "", false, "enables automatic updates of the kubernetes patch version of the cluster [optional]")
 	clusterCreateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this deletes worker nodes! [optional]")
 	clusterCreateCmd.Flags().String("default-storage-class", "", "set default storage class to given name, must be one of the managed storage classes")
@@ -553,8 +552,6 @@ func (c *config) clusterCreate() error {
 	maintenanceBegin := "220000+0100"
 	maintenanceEnd := "233000+0100"
 
-	reversedVPN := strconv.FormatBool(viper.GetBool("reversed-vpn"))
-
 	version := viper.GetString("version")
 	if version == "" {
 		request := cluster.NewListConstraintsParams()
@@ -657,7 +654,8 @@ func (c *config) clusterCreate() error {
 		AdditionalNetworks: networks,
 		PartitionID:        &partition,
 		ClusterFeatures: &models.V1ClusterFeatures{
-			ReversedVPN:            &reversedVPN,
+			// always set reversed vpn for new clusters
+			ReversedVPN:            pointer.Pointer("true"),
 			LogAcceptedConnections: &logAcceptedConnections,
 			DurosStorageEncryption: &encryptedStorageClasses,
 		},
@@ -1784,51 +1782,46 @@ func (c *config) clusterMachineSSH(args []string, console bool) error {
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 	for _, m := range ms {
-		if *m.ID == mid {
+		if *m.ID != mid {
+			continue
+		}
+		if console {
+			fmt.Printf("access console via ssh\n")
+			authContext, err := api.GetAuthContext(viper.GetString("kubeconfig"))
 			if err != nil {
-				return fmt.Errorf("unable determine home directory:%w", err)
-			}
-			if console {
-				fmt.Printf("access console via ssh\n")
-				authContext, err := api.GetAuthContext(viper.GetString("kubeconfig"))
-				if err != nil {
-					return err
-				}
-				env := &env{
-					key:   "LC_METAL_STACK_OIDC_TOKEN",
-					value: authContext.IDToken,
-				}
-				bmcConsolePort := 5222
-				err = sshClient(mid, c.consoleHost, keypair.privatekey, bmcConsolePort, env)
 				return err
 			}
-			networks := m.Allocation.Networks
-			switch *m.Allocation.Role {
-			case "firewall":
-				if keypair.vpn != nil {
-					return c.firewallSSHViaVPN(*m.ID, keypair.privatekey, keypair.vpn)
-				}
-
-				for _, nw := range networks {
-					if *nw.Underlay || *nw.Private {
-						continue
-					}
-					for _, ip := range nw.Ips {
-						if portOpen(ip, "22", time.Second) {
-							err := sshClient("metal", ip, keypair.privatekey, 22, nil)
-							return err
-						}
-					}
-				}
-				return fmt.Errorf("no ip with a open ssh port found")
-			case "machine":
-				// FIXME metal user is not allowed to execute
-				// ip vrf exec <tenantvrf> ssh <machineip>
-				return fmt.Errorf("machine access via ssh not implemented")
-			default:
-				return fmt.Errorf("unknown machine role:%s", *m.Allocation.Role)
-			}
+			bmcConsolePort := 5222
+			err = c.sshClient(mid, c.consoleHost, keypair.privatekey, bmcConsolePort, &authContext.IDToken)
+			return err
 		}
+		networks := m.Allocation.Networks
+		switch *m.Allocation.Role {
+		case "firewall":
+			if keypair.vpn != nil {
+				return c.firewallSSHViaVPN(*m.ID, keypair.privatekey, keypair.vpn)
+			}
+
+			for _, nw := range networks {
+				if *nw.Underlay || *nw.Private {
+					continue
+				}
+				for _, ip := range nw.Ips {
+					if portOpen(ip, "22", time.Second) {
+						err := c.sshClient("metal", ip, keypair.privatekey, 22, nil)
+						return err
+					}
+				}
+			}
+			return fmt.Errorf("no ip with a open ssh port found")
+		case "machine":
+			// FIXME metal user is not allowed to execute
+			// ip vrf exec <tenantvrf> ssh <machineip>
+			return fmt.Errorf("machine access via ssh not implemented")
+		default:
+			return fmt.Errorf("unknown machine role:%s", *m.Allocation.Role)
+		}
+
 	}
 
 	return fmt.Errorf("machine:%s not found in cluster:%s", mid, cid)
