@@ -8,11 +8,11 @@ require (
 	github.com/dcorbe/termui-dpc v0.0.0-20211125210512-9d2673a82dd6
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fatih/color v1.15.0
-	github.com/fi-ts/cloud-go v0.20.22
+	github.com/fi-ts/cloud-go v0.20.23
 	github.com/gardener/gardener v1.59.0
 	github.com/gardener/machine-controller-manager v0.49.3
 	github.com/go-openapi/strfmt v0.21.7
-	github.com/go-playground/validator/v10 v10.14.1
+	github.com/go-playground/validator/v10 v10.12.0
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/gosimple/slug v1.13.1
@@ -68,7 +68,6 @@ require (
 	github.com/emicklei/go-restful/v3 v3.10.2 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
