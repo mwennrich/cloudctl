@@ -140,6 +140,8 @@ func (c *config) auditDescribe(args []string) error {
 		}
 	}
 
+	viper.Set("output-format", "yaml")
+
 	return output.New().Print(trace)
 }
 
