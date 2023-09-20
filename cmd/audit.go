@@ -38,8 +38,8 @@ func newAuditCmd(c *config) *cobra.Command {
 		PreRun: bindPFlags,
 	}
 
-	auditDescribeCmd.Flags().String("phase", "response", "phase of the audit trace. One of [request, response, single, error, opened, closed]")
-	auditDescribeCmd.Flags().Bool("prettify-body", false, "attempts to interpret the body as json and prettifies it")
+	auditDescribeCmd.Flags().String("phase", "request", "phase of the audit trace. One of [request, response, single, error, opened, closed]")
+	auditDescribeCmd.Flags().Bool("prettify-body", true, "attempts to interpret the body as json and prettifies it")
 
 	must(auditDescribeCmd.RegisterFlagCompletionFunc("phase", c.comp.AuditPhaseCompletion))
 
