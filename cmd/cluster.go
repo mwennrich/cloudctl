@@ -303,11 +303,11 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <network>:<ip>; e.g.: --egress internet:1.2.3.4,extnet:123.1.1.1 --egress internet:1.2.3.5 [optional]")
 	clusterCreateCmd.Flags().BoolP("allowprivileged", "", false, "allow privileged containers the cluster (this is achieved through pod security policies and has no effect anymore on clusters >= v1.25")
 	clusterCreateCmd.Flags().String("default-pod-security-standard", "", "sets default pod security standard for clusters >= v1.23.x, defaults to restricted on clusters >= v1.25 (valid values: empty string, privileged, baseline, restricted)")
+	clusterCreateCmd.Flags().BoolP("disable-pod-security-policies", "", false, "disable pod security policies")
 	clusterCreateCmd.Flags().String("audit", "on", "audit logging of cluster API access; can be off, on (default) or splunk (logging to a predefined or custom splunk endpoint). [optional]")
 	clusterCreateCmd.Flags().Duration("healthtimeout", 0, "period (e.g. \"24h\") after which an unhealthy node is declared failed and will be replaced. [optional]")
 	clusterCreateCmd.Flags().Duration("draintimeout", 0, "period (e.g. \"3h\") after which a draining node will be forcefully deleted. [optional]")
 	clusterCreateCmd.Flags().Bool("encrypted-storage-classes", false, "enables the deployment of encrypted duros storage classes into the cluster. please refer to the user manual to properly use volume encryption. [optional]")
-	clusterCreateCmd.Flags().BoolP("reversed-vpn", "", false, "enables usage of reversed-vpn instead of konnectivity tunnel for worker connectivity. [optional]")
 	clusterCreateCmd.Flags().BoolP("autoupdate-kubernetes", "", false, "enables automatic updates of the kubernetes patch version of the cluster [optional]")
 	clusterCreateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this deletes worker nodes! [optional]")
 	clusterCreateCmd.Flags().String("default-storage-class", "", "set default storage class to given name, must be one of the managed storage classes")
@@ -383,6 +383,7 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().StringSlice("removelabels", []string{}, "labels to remove from the cluster")
 	clusterUpdateCmd.Flags().BoolP("allowprivileged", "", false, "allow privileged containers the cluster (this is achieved through pod security policies and has no effect anymore on clusters >=v1.25")
 	clusterUpdateCmd.Flags().String("default-pod-security-standard", "", "set default pod security standard for cluster >=v 1.23.x, send empty string explicitly to disable pod security standards (valid values: empty string, privileged, baseline, restricted)")
+	clusterUpdateCmd.Flags().BoolP("disable-pod-security-policies", "", false, "disable pod security policies")
 	clusterUpdateCmd.Flags().String("audit", "on", "audit logging of cluster API access; can be off, on or splunk (logging to a predefined or custom splunk endpoint).")
 	clusterUpdateCmd.Flags().String("purpose", "", fmt.Sprintf("purpose of the cluster, can be one of %s. SLA is only given on production clusters.", strings.Join(completion.ClusterPurposes, "|")))
 	clusterUpdateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <networkid>:<semicolon-separated ips>; e.g.: --egress internet:1.2.3.4;1.2.3.5 --egress extnet:123.1.1.1 [optional]. Use --egress none to remove all egress rules.")
@@ -542,6 +543,10 @@ func (c *config) clusterCreate() error {
 	if viper.IsSet("default-pod-security-standard") {
 		defaultPodSecurityStandard = pointer.Pointer(viper.GetString("default-pod-security-standard"))
 	}
+	var disablePodSecurityPolicies *bool
+	if viper.IsSet("disable-pod-security-policies") {
+		disablePodSecurityPolicies = pointer.Pointer(viper.GetBool("disable-pod-security-policies"))
+	}
 
 	audit := viper.GetString("audit")
 
@@ -552,8 +557,6 @@ func (c *config) clusterCreate() error {
 	egress := viper.GetStringSlice("egress")
 	maintenanceBegin := "220000+0100"
 	maintenanceEnd := "233000+0100"
-
-	reversedVPN := strconv.FormatBool(viper.GetBool("reversed-vpn"))
 
 	version := viper.GetString("version")
 	if version == "" {
@@ -646,6 +649,7 @@ func (c *config) clusterCreate() error {
 			AllowPrivilegedContainers:  allowprivileged,
 			Version:                    &version,
 			DefaultPodSecurityStandard: defaultPodSecurityStandard,
+			DisablePodSecurityPolicies: disablePodSecurityPolicies,
 		},
 		Audit: auditConfig.Config,
 		Maintenance: &models.V1Maintenance{
@@ -657,7 +661,8 @@ func (c *config) clusterCreate() error {
 		AdditionalNetworks: networks,
 		PartitionID:        &partition,
 		ClusterFeatures: &models.V1ClusterFeatures{
-			ReversedVPN:            &reversedVPN,
+			// always set reversed vpn for new clusters
+			ReversedVPN:            pointer.Pointer("true"),
 			LogAcceptedConnections: &logAcceptedConnections,
 			DurosStorageEncryption: &encryptedStorageClasses,
 		},
@@ -1015,7 +1020,7 @@ func (c *config) updateCluster(args []string) error {
 				}
 			}
 			if worker == nil && !removeworkergroup {
-				fmt.Println("Adding a new worker group to the cluster.")
+				fmt.Println("Adding a new worker group to the cluster. Please note that running multiple worker groups leads to higher basic costs of the cluster!")
 				err = helper.Prompt("Are you sure? (y/n)", "y")
 				if err != nil {
 					return err
@@ -1222,6 +1227,12 @@ func (c *config) updateCluster(args []string) error {
 			return fmt.Errorf("--default-pod-security-standard is set but you forgot to add --yes-i-really-mean-it")
 		}
 		k8s.DefaultPodSecurityStandard = pointer.Pointer(viper.GetString("default-pod-security-standard"))
+	}
+	if viper.IsSet("disable-pod-security-policies") {
+		if !viper.GetBool("yes-i-really-mean-it") {
+			return fmt.Errorf("--disable-pod-security-policies set but you forgot to add --yes-i-really-mean-it")
+		}
+		k8s.DisablePodSecurityPolicies = pointer.Pointer(viper.GetBool("disable-pod-security-policies"))
 	}
 
 	cur.Kubernetes = k8s
@@ -1784,51 +1795,46 @@ func (c *config) clusterMachineSSH(args []string, console bool) error {
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 	for _, m := range ms {
-		if *m.ID == mid {
+		if *m.ID != mid {
+			continue
+		}
+		if console {
+			fmt.Printf("access console via ssh\n")
+			authContext, err := api.GetAuthContext(viper.GetString("kubeconfig"))
 			if err != nil {
-				return fmt.Errorf("unable determine home directory:%w", err)
-			}
-			if console {
-				fmt.Printf("access console via ssh\n")
-				authContext, err := api.GetAuthContext(viper.GetString("kubeconfig"))
-				if err != nil {
-					return err
-				}
-				env := &env{
-					key:   "LC_METAL_STACK_OIDC_TOKEN",
-					value: authContext.IDToken,
-				}
-				bmcConsolePort := 5222
-				err = sshClient(mid, c.consoleHost, keypair.privatekey, bmcConsolePort, env)
 				return err
 			}
-			networks := m.Allocation.Networks
-			switch *m.Allocation.Role {
-			case "firewall":
-				if keypair.vpn != nil {
-					return c.firewallSSHViaVPN(*m.ID, keypair.privatekey, keypair.vpn)
-				}
-
-				for _, nw := range networks {
-					if *nw.Underlay || *nw.Private {
-						continue
-					}
-					for _, ip := range nw.Ips {
-						if portOpen(ip, "22", time.Second) {
-							err := sshClient("metal", ip, keypair.privatekey, 22, nil)
-							return err
-						}
-					}
-				}
-				return fmt.Errorf("no ip with a open ssh port found")
-			case "machine":
-				// FIXME metal user is not allowed to execute
-				// ip vrf exec <tenantvrf> ssh <machineip>
-				return fmt.Errorf("machine access via ssh not implemented")
-			default:
-				return fmt.Errorf("unknown machine role:%s", *m.Allocation.Role)
-			}
+			bmcConsolePort := 5222
+			err = c.sshClient(mid, c.consoleHost, keypair.privatekey, bmcConsolePort, &authContext.IDToken)
+			return err
 		}
+		networks := m.Allocation.Networks
+		switch *m.Allocation.Role {
+		case "firewall":
+			if keypair.vpn != nil {
+				return c.firewallSSHViaVPN(*m.ID, keypair.privatekey, keypair.vpn)
+			}
+
+			for _, nw := range networks {
+				if *nw.Underlay || *nw.Private {
+					continue
+				}
+				for _, ip := range nw.Ips {
+					if portOpen(ip, "22", time.Second) {
+						err := c.sshClient("metal", ip, keypair.privatekey, 22, nil)
+						return err
+					}
+				}
+			}
+			return fmt.Errorf("no ip with a open ssh port found")
+		case "machine":
+			// FIXME metal user is not allowed to execute
+			// ip vrf exec <tenantvrf> ssh <machineip>
+			return fmt.Errorf("machine access via ssh not implemented")
+		default:
+			return fmt.Errorf("unknown machine role:%s", *m.Allocation.Role)
+		}
+
 	}
 
 	return fmt.Errorf("machine:%s not found in cluster:%s", mid, cid)
