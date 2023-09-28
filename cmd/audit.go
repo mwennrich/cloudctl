@@ -38,8 +38,8 @@ func newAuditCmd(c *config) *cobra.Command {
 		PreRun: bindPFlags,
 	}
 
-	auditDescribeCmd.Flags().String("phase", "response", "phase of the audit trace. One of [request, response, single, error, opened, closed]")
-	auditDescribeCmd.Flags().Bool("prettify-body", false, "attempts to interpret the body as json and prettifies it")
+	auditDescribeCmd.Flags().String("phase", "request", "phase of the audit trace. One of [request, response, single, error, opened, closed]")
+	auditDescribeCmd.Flags().Bool("prettify-body", true, "attempts to interpret the body as json and prettifies it")
 
 	must(auditDescribeCmd.RegisterFlagCompletionFunc("phase", c.comp.AuditPhaseCompletion))
 
@@ -56,7 +56,7 @@ func newAuditCmd(c *config) *cobra.Command {
 	auditListCmd.Flags().String("tenant", "", "tenant of the audit trace.")
 
 	auditListCmd.Flags().String("detail", "", "detail of the audit trace. An HTTP method, unary or stream")
-	auditListCmd.Flags().String("phase", "", "phase of the audit trace. One of [request, response, single, error, opened, closed]")
+	auditListCmd.Flags().String("phase", "request", "phase of the audit trace. One of [request, response, single, error, opened, closed]")
 
 	auditListCmd.Flags().String("path", "", "api path of the audit trace.")
 	auditListCmd.Flags().String("forwarded-for", "", "forwarded for of the audit trace.")
@@ -139,6 +139,8 @@ func (c *config) auditDescribe(args []string) error {
 			}
 		}
 	}
+
+	viper.Set("output-format", "yaml")
 
 	return output.New().Print(trace)
 }
