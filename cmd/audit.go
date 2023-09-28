@@ -56,7 +56,7 @@ func newAuditCmd(c *config) *cobra.Command {
 	auditListCmd.Flags().String("tenant", "", "tenant of the audit trace.")
 
 	auditListCmd.Flags().String("detail", "", "detail of the audit trace. An HTTP method, unary or stream")
-	auditListCmd.Flags().String("phase", "", "phase of the audit trace. One of [request, response, single, error, opened, closed]")
+	auditListCmd.Flags().String("phase", "request", "phase of the audit trace. One of [request, response, single, error, opened, closed]")
 
 	auditListCmd.Flags().String("path", "", "api path of the audit trace.")
 	auditListCmd.Flags().String("forwarded-for", "", "forwarded for of the audit trace.")
