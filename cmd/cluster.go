@@ -388,7 +388,7 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().BoolP("disable-pod-security-policies", "", false, "disable pod security policies")
 	clusterUpdateCmd.Flags().String("audit", "on", "audit logging of cluster API access; can be off, on or splunk (logging to a predefined or custom splunk endpoint).")
 	clusterUpdateCmd.Flags().String("purpose", "", fmt.Sprintf("purpose of the cluster, can be one of %s. SLA is only given on production clusters.", strings.Join(completion.ClusterPurposes, "|")))
-	clusterUpdateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <networkid>:<semicolon-separated ips>; e.g.: --egress internet:1.2.3.4;1.2.3.5 --egress extnet:123.1.1.1 [optional]. Use --egress none to remove all egress rules.")
+	clusterUpdateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <networkid>:<semicolon-separated ips>; e.g.: --egress internet:1.2.3.4;1.2.3.5 --egress extnet:123.1.1.1 [optional]. Use \"--egress none\" to remove all egress rules.")
 	clusterUpdateCmd.Flags().StringSlice("external-networks", []string{}, "external networks of the cluster")
 	clusterUpdateCmd.Flags().Duration("healthtimeout", 0, "period (e.g. \"24h\") after which an unhealthy node is declared failed and will be replaced. (0 = provider-default)")
 	clusterUpdateCmd.Flags().Duration("draintimeout", 0, "period (e.g. \"3h\") after which a draining node will be forcefully deleted. (0 = provider-default)")
@@ -396,7 +396,6 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().String("maxunavailable", "", "max number (e.g. 0) or percentage (e.g. 10%) of workers that can be unavailable during a update of the cluster.")
 	clusterUpdateCmd.Flags().BoolP("autoupdate-kubernetes", "", false, "enables automatic updates of the kubernetes patch version of the cluster")
 	clusterUpdateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this deletes worker nodes!")
-	clusterUpdateCmd.Flags().BoolP("reversed-vpn", "", false, "enables usage of reversed-vpn instead of konnectivity tunnel for worker connectivity.")
 	clusterUpdateCmd.Flags().Bool("encrypted-storage-classes", false, "enables the deployment of encrypted duros storage classes into the cluster. please refer to the user manual to properly use volume encryption.")
 	clusterUpdateCmd.Flags().String("default-storage-class", "", "set default storage class to given name, must be one of the managed storage classes")
 	clusterUpdateCmd.Flags().BoolP("disable-custom-default-storage-class", "", false, "if set to true, no default class is deployed, you have to set one of your storageclasses manually to default")
@@ -667,8 +666,6 @@ func (c *config) clusterCreate() error {
 		AdditionalNetworks: networks,
 		PartitionID:        &partition,
 		ClusterFeatures: &models.V1ClusterFeatures{
-			// always set reversed vpn for new clusters
-			ReversedVPN:            pointer.Pointer("true"),
 			LogAcceptedConnections: &logAcceptedConnections,
 			DurosStorageEncryption: &encryptedStorageClasses,
 		},
@@ -954,7 +951,6 @@ func (c *config) updateCluster(args []string) error {
 	defaultStorageClass := viper.GetString("default-storage-class")
 	disableDefaultStorageClass := viper.GetBool("disable-custom-default-storage-class")
 
-	reversedVPN := strconv.FormatBool(viper.GetBool("reversed-vpn"))
 	encryptedStorageClasses := strconv.FormatBool(viper.GetBool("encrypted-storage-classes"))
 
 	workerlabels, err := helper.LabelsToMap(workerlabelslice)
@@ -1009,9 +1005,6 @@ func (c *config) updateCluster(args []string) error {
 	var clusterFeatures models.V1ClusterFeatures
 	if viper.IsSet("encrypted-storage-classes") {
 		clusterFeatures.DurosStorageEncryption = &encryptedStorageClasses
-	}
-	if viper.IsSet("reversed-vpn") {
-		clusterFeatures.ReversedVPN = &reversedVPN
 	}
 	if viper.IsSet("logacceptedconns") {
 		clusterFeatures.LogAcceptedConnections = &logAcceptedConnections
