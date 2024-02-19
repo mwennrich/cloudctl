@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"syscall"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fi-ts/cloudctl/cmd/helper"
@@ -13,7 +17,20 @@ import (
 	"github.com/metal-stack/v"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"golang.org/x/term"
 )
+
+type OIDCToken struct {
+	AccessToken      string `json:"access_token"`
+	ExpiresIn        int    `json:"expires_in"`
+	RefreshExpiresIn int    `json:"refresh_expires_in"`
+	RefreshToken     string `json:"refresh_token"`
+	TokenType        string `json:"token_type"`
+	NotBeforePolicy  int    `json:"not-before-policy"`
+	SessionState     string `json:"session_state"`
+	Scope            string `json:"scope"`
+}
 
 func newLoginCmd(c *config) *cobra.Command {
 	loginCmd := &cobra.Command{
@@ -29,6 +46,37 @@ func newLoginCmd(c *config) *cobra.Command {
 			if viper.GetBool("print-only") {
 				// do not store, only print to console
 				handler = printTokenHandler
+			} else if viper.GetBool("direct") {
+				// get token from open id connect flow
+				if os.Getenv("CLOUDCTL_USER") == "" {
+					return fmt.Errorf("CLOUDCTL_USER variable must be set for direct login")
+				}
+
+				fmt.Print("Enter Password: ")
+				bytePassword, err := term.ReadPassword(int(syscall.Stdin))
+				if err != nil {
+					return err
+				}
+				password := string(bytePassword)
+
+				cs, err := api.GetContexts()
+				if err != nil {
+					return err
+				}
+
+				oidcToken, err := getOIDCToken(os.Getenv("CLOUDCTL_USER"), password)
+				if err != nil {
+					return err
+				}
+				_, err = auth.UpdateKubeConfigContext(viper.GetString("kubeconfig"), auth.TokenInfo{
+					IDToken:      oidcToken.AccessToken,
+					RefreshToken: oidcToken.RefreshToken}, auth.ExtractName, api.FormatContextName(api.CloudContext, cs.CurrentContext))
+				if err != nil {
+					return err
+				}
+				fmt.Println()
+				return nil
+
 			} else {
 				cs, err := api.GetContexts()
 				if err != nil {
@@ -107,10 +155,39 @@ func newLoginCmd(c *config) *cobra.Command {
 		PreRun: bindPFlags,
 	}
 	loginCmd.Flags().Bool("print-only", false, "If true, the token is printed to stdout")
+	loginCmd.Flags().Bool("direct", false, "If true, login directly to the cloud-api without using the browser")
 	return loginCmd
 }
 
 func printTokenHandler(tokenInfo auth.TokenInfo) error {
 	fmt.Println(tokenInfo.IDToken)
 	return nil
+}
+
+func getOIDCToken(username, password string) (OIDCToken, error) {
+	ctx := api.MustDefaultContext()
+
+	data := url.Values{}
+	data.Set("grant_type", "password")
+	data.Set("client_id", ctx.ClientID)
+	data.Set("client_secret", ctx.ClientSecret)
+	data.Set("username", username)
+	data.Set("password", password)
+	resp, err := http.PostForm(ctx.IssuerURL+"/protocol/openid-connect/token", data)
+	if err != nil {
+		return OIDCToken{}, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return OIDCToken{}, err
+	}
+
+	var oidcToken OIDCToken
+	err = json.Unmarshal(body, &oidcToken)
+	if err != nil {
+		return OIDCToken{}, err
+	}
+	return oidcToken, nil
 }
