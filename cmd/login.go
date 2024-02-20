@@ -70,7 +70,7 @@ func newLoginCmd(c *config) *cobra.Command {
 					return err
 				}
 				ctx := api.MustDefaultContext()
-				oidcToken, err := getOIDCToken(os.Getenv("CLOUDCTL_USER"), password, ctx)
+				oidcToken, err := getOIDCToken(username, password, ctx)
 				if err != nil {
 					return err
 				}
@@ -194,7 +194,7 @@ func getOIDCToken(username, password string, ctx api.Context) (OIDCToken, error)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return OIDCToken{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return OIDCToken{}, fmt.Errorf("unexpected status code: %d %s", resp.StatusCode, resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
