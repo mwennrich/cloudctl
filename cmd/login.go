@@ -48,8 +48,13 @@ func newLoginCmd(c *config) *cobra.Command {
 				handler = printTokenHandler
 			} else if viper.GetBool("direct") {
 				// get token from open id connect flow
-				if os.Getenv("CLOUDCTL_USER") == "" {
-					return fmt.Errorf("CLOUDCTL_USER variable must be set for direct login")
+				username := viper.GetString("username")
+				if username == "" {
+					fmt.Print("Enter Username: ")
+					_, err := fmt.Scanln(&username)
+					if err != nil {
+						return err
+					}
 				}
 
 				fmt.Print("Enter Password: ")
@@ -57,24 +62,34 @@ func newLoginCmd(c *config) *cobra.Command {
 				if err != nil {
 					return err
 				}
+				fmt.Println()
 				password := string(bytePassword)
 
 				cs, err := api.GetContexts()
 				if err != nil {
 					return err
 				}
-
-				oidcToken, err := getOIDCToken(os.Getenv("CLOUDCTL_USER"), password)
+				ctx := api.MustDefaultContext()
+				oidcToken, err := getOIDCToken(os.Getenv("CLOUDCTL_USER"), password, ctx)
 				if err != nil {
 					return err
 				}
 				_, err = auth.UpdateKubeConfigContext(viper.GetString("kubeconfig"), auth.TokenInfo{
 					IDToken:      oidcToken.AccessToken,
-					RefreshToken: oidcToken.RefreshToken}, auth.ExtractName, api.FormatContextName(api.CloudContext, cs.CurrentContext))
+					RefreshToken: oidcToken.RefreshToken,
+					TokenClaims: auth.Claims{
+						Issuer: ctx.IssuerURL,
+						Name:   username,
+					},
+					IssuerConfig: auth.IssuerConfig{
+						ClientID:     ctx.ClientID,
+						ClientSecret: ctx.ClientSecret,
+						IssuerURL:    ctx.IssuerURL,
+					},
+				}, auth.ExtractName, api.FormatContextName(api.CloudContext, cs.CurrentContext))
 				if err != nil {
 					return err
 				}
-				fmt.Println()
 				return nil
 
 			} else {
@@ -156,6 +171,7 @@ func newLoginCmd(c *config) *cobra.Command {
 	}
 	loginCmd.Flags().Bool("print-only", false, "If true, the token is printed to stdout")
 	loginCmd.Flags().Bool("direct", false, "If true, login directly to the cloud-api without using the browser")
+	loginCmd.Flags().String("username", "", "username for direct login")
 	return loginCmd
 }
 
@@ -164,9 +180,7 @@ func printTokenHandler(tokenInfo auth.TokenInfo) error {
 	return nil
 }
 
-func getOIDCToken(username, password string) (OIDCToken, error) {
-	ctx := api.MustDefaultContext()
-
+func getOIDCToken(username, password string, ctx api.Context) (OIDCToken, error) {
 	data := url.Values{}
 	data.Set("grant_type", "password")
 	data.Set("client_id", ctx.ClientID)
@@ -178,6 +192,10 @@ func getOIDCToken(username, password string) (OIDCToken, error) {
 		return OIDCToken{}, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return OIDCToken{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
