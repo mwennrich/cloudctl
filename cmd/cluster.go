@@ -238,7 +238,8 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().Duration("draintimeout", 0, "period (e.g. \"3h\") after which a draining node will be forcefully deleted. [optional]")
 	clusterCreateCmd.Flags().Bool("encrypted-storage-classes", false, "enables the deployment of encrypted duros storage classes into the cluster. please refer to the user manual to properly use volume encryption. [optional]")
 	clusterCreateCmd.Flags().BoolP("autoupdate-kubernetes", "", false, "enables automatic updates of the kubernetes patch version of the cluster [optional]")
-	clusterCreateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this deletes worker nodes! [optional]")
+	clusterCreateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this rolls worker nodes! [optional]")
+	clusterCreateCmd.Flags().Bool("autoupdate-firewallimage", false, "enables automatic updates of the firewall image, be aware that this rolls firewalls! [optional]")
 	clusterCreateCmd.Flags().String("maintenance-begin", "220000+0100", "defines the beginning of the nightly maintenance time window (e.g. for autoupdates) in the format HHMMSS+ZONE, e.g. \"220000+0100\". [optional]")
 	clusterCreateCmd.Flags().String("maintenance-end", "233000+0100", "defines the end of the nightly maintenance time window (e.g. for autoupdates) in the format HHMMSS+ZONE, e.g. \"233000+0100\". [optional]")
 	clusterCreateCmd.Flags().String("default-storage-class", "", "set default storage class to given name, must be one of the managed storage classes")
@@ -332,6 +333,7 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().String("maxunavailable", "", "max number (e.g. 0) or percentage (e.g. 10%) of workers that can be unavailable during a update of the cluster.")
 	clusterUpdateCmd.Flags().BoolP("autoupdate-kubernetes", "", false, "enables automatic updates of the kubernetes patch version of the cluster")
 	clusterUpdateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this deletes worker nodes!")
+	clusterUpdateCmd.Flags().Bool("autoupdate-firewallimage", false, "enables automatic updates of the firewall image, be aware that this rolls firewalls! [optional]")
 	clusterUpdateCmd.Flags().String("maintenance-begin", "", "defines the beginning of the nightly maintenance time window (e.g. for autoupdates) in the format HHMMSS+ZONE, e.g. \"220000+0100\". [optional]")
 	clusterUpdateCmd.Flags().String("maintenance-end", "", "defines the end of the nightly maintenance time window (e.g. for autoupdates) in the format HHMMSS+ZONE, e.g. \"233000+0100\". [optional]")
 	clusterUpdateCmd.Flags().Bool("encrypted-storage-classes", false, "enables the deployment of encrypted duros storage classes into the cluster. please refer to the user manual to properly use volume encryption.")
@@ -627,7 +629,11 @@ WARNING: You are going to create a cluster that has no default internet access w
 		NetworkAccessType:         networkAccessType,
 	}
 
-	if viper.IsSet("autoupdate-kubernetes") || viper.IsSet("autoupdate-machineimages") || purpose == string(v1beta1.ShootPurposeEvaluation) {
+	if viper.IsSet("autoupdate-kubernetes") ||
+		viper.IsSet("autoupdate-machineimages") ||
+		viper.IsSet("autoupdate-firewallimage") ||
+		purpose == string(v1beta1.ShootPurposeEvaluation) {
+
 		scr.Maintenance.AutoUpdate = &models.V1MaintenanceAutoUpdate{}
 
 		// default to true for evaluation clusters
@@ -641,6 +647,10 @@ WARNING: You are going to create a cluster that has no default internet access w
 		if viper.IsSet("autoupdate-machineimages") {
 			auto := viper.GetBool("autoupdate-machineimages")
 			scr.Maintenance.AutoUpdate.MachineImage = &auto
+		}
+		if viper.IsSet("autoupdate-firewallimage") {
+			auto := viper.GetBool("autoupdate-firewallimage")
+			scr.Maintenance.AutoUpdate.FirewallImage = &auto
 		}
 	}
 
@@ -710,7 +720,7 @@ WARNING: You are going to create a cluster that has no default internet access w
 	if err != nil {
 		return err
 	}
-	return output.New().Print(shoot.Payload)
+	return c.describePrinter.Print(shoot.Payload)
 }
 
 func (c *config) clusterList() error {
@@ -766,7 +776,7 @@ func (c *config) clusterList() error {
 		if err != nil {
 			return err
 		}
-		return output.New().Print(response.Payload)
+		return c.listPrinter.Print(response.Payload)
 	}
 
 	request := cluster.NewListClustersParams()
@@ -774,7 +784,7 @@ func (c *config) clusterList() error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(shoots.Payload)
+	return c.listPrinter.Print(shoots.Payload)
 }
 
 func (c *config) clusterKubeconfig(args []string) error {
@@ -887,7 +897,7 @@ func (c *config) reconcileCluster(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(shoot.Payload)
+	return c.describePrinter.Print(shoot.Payload)
 }
 
 func (c *config) updateCluster(args []string) error {
@@ -993,6 +1003,7 @@ func (c *config) updateCluster(args []string) error {
 			AutoUpdate: &models.V1MaintenanceAutoUpdate{
 				KubernetesVersion: current.Maintenance.AutoUpdate.KubernetesVersion,
 				MachineImage:      current.Maintenance.AutoUpdate.MachineImage,
+				FirewallImage:     current.Maintenance.AutoUpdate.FirewallImage,
 			},
 		},
 		ClusterFeatures:           &clusterFeatures,
@@ -1016,7 +1027,7 @@ func (c *config) updateCluster(args []string) error {
 				}
 			}
 			if worker == nil && !removeworkergroup {
-				fmt.Println("Adding a new worker group to the cluster. Please note that running multiple worker groups leads to higher basic costs of the cluster!")
+				fmt.Printf("Adding a new worker group to cluster:%q. Please note that running multiple worker groups leads to higher basic costs of the cluster!\n", *current.Name)
 				err = helper.Prompt("Are you sure? (y/n)", "y")
 				if err != nil {
 					return err
@@ -1046,7 +1057,7 @@ func (c *config) updateCluster(args []string) error {
 				return fmt.Errorf("worker group %s not found", workergroupname)
 			}
 
-			fmt.Println("WARNING. Removing a worker group cannot be undone and causes the loss of local data on the deleted nodes.")
+			fmt.Printf("WARNING. Removing a worker group from cluster:%q cannot be undone and causes the loss of local data on the deleted nodes.\n", *current.Name)
 			err = helper.Prompt("Are you sure? (y/n)", "y")
 			if err != nil {
 				return err
@@ -1076,7 +1087,7 @@ func (c *config) updateCluster(args []string) error {
 					}
 				}
 				if int(maxsize) < c {
-					fmt.Println("WARNING. New maxsize is lower than currently active machines. A random worker node which is still in use will be removed.")
+					fmt.Printf("WARNING. New maxsize of cluster:%q is lower than currently active machines. A random worker node which is still in use will be removed.\n", *current.Name)
 					err = helper.Prompt("Are you sure? (y/n)", "y")
 					if err != nil {
 						return err
@@ -1125,7 +1136,7 @@ func (c *config) updateCluster(args []string) error {
 
 			if viper.IsSet("workerversion") {
 				if pointer.SafeDeref(worker.KubernetesVersion) != "" && workergroupKubernetesVersion == "" {
-					fmt.Println("WARNING. Removing the worker version override may update your worker nodes to the version of the api server.")
+					fmt.Printf("WARNING. Removing the worker version override of cluster:%q may update your worker nodes to the version of the api server.\n", *current.Name)
 					err = helper.Prompt("Are you sure? (y/n)", "y")
 					if err != nil {
 						return err
@@ -1153,6 +1164,10 @@ func (c *config) updateCluster(args []string) error {
 	if viper.IsSet("autoupdate-machineimages") {
 		auto := viper.GetBool("autoupdate-machineimages")
 		cur.Maintenance.AutoUpdate.MachineImage = &auto
+	}
+	if viper.IsSet("autoupdate-firewallimage") {
+		auto := viper.GetBool("autoupdate-firewallimage")
+		cur.Maintenance.AutoUpdate.FirewallImage = &auto
 	}
 	if viper.IsSet("maintenance-begin") {
 		begin := viper.GetString("maintenance-begin")
@@ -1211,7 +1226,7 @@ func (c *config) updateCluster(args []string) error {
 		}
 
 		if viper.IsSet("enable-kube-apiserver-acl") && viper.GetBool("enable-kube-apiserver-acl") {
-			fmt.Println("WARNING: Restricting access to the kube-apiserver prevents FI-TS operators from helping you in case of any issues in your cluster.")
+			fmt.Printf("WARNING: Restricting access of cluster:%q to the kube-apiserver prevents FI-TS operators from helping you in case of any issues in your cluster.\n", *current.Name)
 			err = helper.Prompt("Are you sure? (y/n)", "y")
 			if err != nil {
 				return err
@@ -1315,7 +1330,7 @@ func (c *config) updateCluster(args []string) error {
 	}
 
 	if updateCausesDowntime && !viper.GetBool("yes-i-really-mean-it") {
-		fmt.Println("This cluster update will cause downtime.")
+		fmt.Printf("This update of cluster:%q will cause downtime.\n", *current.Name)
 		err = helper.Prompt("Are you sure? (y/n)", "y")
 		if err != nil {
 			return err
@@ -1327,7 +1342,7 @@ func (c *config) updateCluster(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(shoot.Payload)
+	return c.describePrinter.Print(shoot.Payload)
 }
 
 func (c *config) clusterDelete(args []string) error {
@@ -1346,7 +1361,7 @@ func (c *config) clusterDelete(args []string) error {
 		return err
 	}
 
-	genericcli.Must(output.New().Print(resp.Payload))
+	genericcli.Must(c.listPrinter.Print(resp.Payload))
 
 	firstPartOfClusterID := strings.Split(*resp.Payload.ID, "-")[0]
 	fmt.Println("Please answer some security questions to delete this cluster")
@@ -1365,7 +1380,7 @@ func (c *config) clusterDelete(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(cl.Payload)
+	return c.describePrinter.Print(cl.Payload)
 }
 
 func (c *config) clusterDescribe(args []string) error {
@@ -1383,7 +1398,7 @@ func (c *config) clusterDescribe(args []string) error {
 		return err
 	}
 	viper.Set("output-format", "yaml")
-	return output.New().Print(shoot.Payload)
+	return c.describePrinter.Print(shoot.Payload)
 }
 
 func (c *config) clusterIssues(args []string) error {
@@ -1422,7 +1437,7 @@ func (c *config) clusterIssues(args []string) error {
 			if err != nil {
 				return err
 			}
-			return output.New().Print(output.ShootIssuesResponses(response.Payload))
+			return c.listPrinter.Print(output.ShootIssuesResponses(response.Payload))
 		}
 
 		request := cluster.NewListClustersParams().WithReturnMachines(&boolTrue)
@@ -1430,7 +1445,7 @@ func (c *config) clusterIssues(args []string) error {
 		if err != nil {
 			return err
 		}
-		return output.New().Print(output.ShootIssuesResponses(shoots.Payload))
+		return c.listPrinter.Print(output.ShootIssuesResponses(shoots.Payload))
 	}
 
 	ci, err := c.clusterID("issues", args)
@@ -1443,7 +1458,7 @@ func (c *config) clusterIssues(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(output.ShootIssuesResponse(shoot.Payload))
+	return c.listPrinter.Print(output.ShootIssuesResponse(shoot.Payload))
 }
 
 func (c *config) clusterMachines(args []string) error {
@@ -1458,17 +1473,17 @@ func (c *config) clusterMachines(args []string) error {
 		return err
 	}
 
-	if output.New().Type() != "table" {
-		return output.New().Print(shoot.Payload)
+	if viper.GetString("output-format") != "table" {
+		return c.describePrinter.Print(shoot.Payload)
 	}
 
 	fmt.Println("Cluster:")
-	genericcli.Must(output.New().Print(shoot.Payload))
+	genericcli.Must(c.listPrinter.Print(shoot.Payload))
 
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 	fmt.Println("\nMachines:")
-	return output.New().Print(ms)
+	return c.listPrinter.Print(ms)
 }
 
 func (c *config) clusterLogs(args []string) error {
@@ -1491,13 +1506,13 @@ func (c *config) clusterLogs(args []string) error {
 		lastErrors = shoot.Payload.Status.LastErrors
 	}
 
-	if output.New().Type() != "table" {
+	if viper.GetString("output-format") != "table" {
 		type s struct {
 			Conditions    []*models.V1beta1Condition
 			LastOperation *models.V1beta1LastOperation
 			LastErrors    []*models.V1beta1LastError
 		}
-		return output.New().Print(s{
+		return c.describePrinter.Print(s{
 			Conditions:    conditions,
 			LastOperation: lastOperation,
 			LastErrors:    lastErrors,
@@ -1505,19 +1520,19 @@ func (c *config) clusterLogs(args []string) error {
 	}
 
 	fmt.Println("Conditions:")
-	err = output.New().Print(conditions)
+	err = c.listPrinter.Print(conditions)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("\nLast Errors:")
-	err = output.New().Print(lastErrors)
+	err = c.listPrinter.Print(lastErrors)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("\nLast Operation:")
-	return output.New().Print(lastOperation)
+	return c.listPrinter.Print(lastOperation)
 }
 
 func (c *config) clusterInputs() error {
@@ -1531,7 +1546,7 @@ func (c *config) clusterInputs() error {
 		return err
 	}
 
-	return output.New().Print(sc)
+	return c.describePrinter.Print(sc.Payload)
 }
 
 func (c *config) clusterDNSManifest(args []string) error {
@@ -1675,7 +1690,7 @@ func (c *config) clusterMachineReset(args []string) error {
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 
-	return output.New().Print(ms)
+	return c.listPrinter.Print(ms)
 }
 
 func (c *config) clusterMachineCycle(args []string) error {
@@ -1697,7 +1712,7 @@ func (c *config) clusterMachineCycle(args []string) error {
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 
-	return output.New().Print(ms)
+	return c.listPrinter.Print(ms)
 }
 
 func (c *config) clusterMachineReinstall(args []string) error {
@@ -1723,7 +1738,7 @@ func (c *config) clusterMachineReinstall(args []string) error {
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 
-	return output.New().Print(ms)
+	return c.listPrinter.Print(ms)
 }
 
 func (c *config) clusterMachinePackages(args []string) error {
@@ -1787,7 +1802,7 @@ func (c *config) clusterMonitoringSecret(args []string) error {
 		return err
 	}
 
-	return output.New().Print(secret.Payload)
+	return c.describePrinter.Print(secret.Payload)
 }
 
 func (c *config) clusterMachineSSH(args []string, console bool) error {
