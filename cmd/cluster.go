@@ -437,6 +437,10 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCmd.AddCommand(clusterMonitoringSecretCmd)
 	clusterCmd.AddCommand(newClusterAuditCmd(c))
 
+	if !viper.IsSet("output-format") {
+		viper.Set("output-format", "table")
+	}
+
 	return clusterCmd
 }
 
