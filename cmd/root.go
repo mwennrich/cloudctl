@@ -155,7 +155,7 @@ func initConfigWithViperCtx(cfg *config) error {
 	ctx := api.MustDefaultContext()
 
 	cfg.listPrinter = newPrinterFromCLI(cfg.out)
-	cfg.describePrinter = defaultToYAMLPrinter(cfg.out)
+	cfg.describePrinter = newPrinterFromCLI(cfg.out)
 
 	opts := &slog.HandlerOptions{}
 	if viper.GetBool("debug") {

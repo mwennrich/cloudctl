@@ -10,6 +10,7 @@ import (
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/go-openapi/strfmt"
 	"github.com/metal-stack/metal-lib/pkg/genericcli"
+	"github.com/metal-stack/metal-lib/pkg/genericcli/printers"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -138,9 +139,7 @@ func (c *config) auditDescribe(args []string) error {
 		}
 	}
 
-	viper.Set("output-format", "yaml")
-
-	return c.describePrinter.Print(trace)
+	return printers.NewYAMLPrinter().Print(trace)
 }
 
 func eventuallyRelativeDateTime(s string) (strfmt.DateTime, error) {

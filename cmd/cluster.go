@@ -27,6 +27,7 @@ import (
 	"github.com/gosimple/slug"
 	"github.com/metal-stack/metal-lib/auth"
 	"github.com/metal-stack/metal-lib/pkg/genericcli"
+	"github.com/metal-stack/metal-lib/pkg/genericcli/printers"
 	"github.com/metal-stack/metal-lib/pkg/pointer"
 
 	"github.com/fi-ts/cloud-go/api/models"
@@ -436,10 +437,6 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCmd.AddCommand(clusterDNSManifestCmd)
 	clusterCmd.AddCommand(clusterMonitoringSecretCmd)
 	clusterCmd.AddCommand(newClusterAuditCmd(c))
-
-	if !viper.IsSet("output-format") {
-		viper.Set("output-format", "table")
-	}
 
 	return clusterCmd
 }
@@ -1401,8 +1398,8 @@ func (c *config) clusterDescribe(args []string) error {
 	if err != nil {
 		return err
 	}
-	viper.Set("output-format", "yaml")
-	return c.describePrinter.Print(shoot.Payload)
+
+	return printers.NewYAMLPrinter().Print(shoot.Payload)
 }
 
 func (c *config) clusterIssues(args []string) error {
