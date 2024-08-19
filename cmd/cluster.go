@@ -1484,7 +1484,10 @@ func (c *config) clusterMachines(args []string) error {
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 	fmt.Println("\nMachines:")
-	return c.listPrinter.Print(ms)
+
+	// TODO: when migrating to new table printer from metal-lib, use existing listprinter!
+	// return c.listPrinter.Print(ms)
+	return output.New().Print(ms)
 }
 
 func (c *config) clusterLogs(args []string) error {
