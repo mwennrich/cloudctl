@@ -7,7 +7,7 @@ import (
 
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/cmd/helper"
-	"github.com/fi-ts/cloudctl/cmd/output"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
 	"gopkg.in/yaml.v3"
 
 	"github.com/fi-ts/cloud-go/api/client/tenant"
@@ -27,7 +27,6 @@ func newTenantCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.tenantList()
 		},
-		PreRun: bindPFlags,
 	}
 	tenantDescribeCmd := &cobra.Command{
 		Use:   "describe <tenantID>",
@@ -35,7 +34,6 @@ func newTenantCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.tenantDescribe(args)
 		},
-		PreRun:            bindPFlags,
 		ValidArgsFunction: c.comp.TenantListCompletion,
 	}
 	tenantEditCmd := &cobra.Command{
@@ -44,7 +42,6 @@ func newTenantCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.tenantEdit(args)
 		},
-		PreRun:            bindPFlags,
 		ValidArgsFunction: c.comp.TenantListCompletion,
 	}
 	tenantApplyCmd := &cobra.Command{
@@ -53,12 +50,11 @@ func newTenantCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.tenantApply()
 		},
-		PreRun: bindPFlags,
 	}
 
 	tenantListCmd.Flags().String("id", "", "show projects of given id")
 	tenantListCmd.Flags().String("name", "", "show projects of given name")
-	must(tenantListCmd.RegisterFlagCompletionFunc("id", c.comp.TenantListCompletion))
+	genericcli.Must(tenantListCmd.RegisterFlagCompletionFunc("id", c.comp.TenantListCompletion))
 
 	tenantApplyCmd.Flags().StringP("file", "f", "", `filename of the create or update request in yaml format, or - for stdin.
 	Example tenant update:
@@ -100,7 +96,7 @@ func (c *config) tenantDescribe(args []string) error {
 	if err != nil {
 		return fmt.Errorf("tenant describe error:%w", err)
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) tenantList() error {
@@ -117,7 +113,7 @@ func (c *config) tenantList() error {
 			return err
 		}
 
-		return output.New().Print(response.Payload)
+		return c.listPrinter.Print(response.Payload)
 	}
 
 	request := tenant.NewListTenantsParams()
@@ -125,7 +121,7 @@ func (c *config) tenantList() error {
 	if err != nil {
 		return fmt.Errorf("tenant list error:%w", err)
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) tenantApply() error {
@@ -177,7 +173,7 @@ func (c *config) tenantApply() error {
 			continue
 		}
 	}
-	return output.New().Print(response)
+	return c.listPrinter.Print(response)
 }
 
 func (c *config) tenantEdit(args []string) error {
@@ -221,7 +217,7 @@ func (c *config) tenantEdit(args []string) error {
 		if err != nil {
 			return err
 		}
-		return output.New().Print(uresp.Payload)
+		return c.listPrinter.Print(uresp.Payload)
 	}
 
 	return helper.Edit(id, getFunc, updateFunc)

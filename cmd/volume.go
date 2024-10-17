@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/fi-ts/cloud-go/api/client/volume"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
+	"github.com/metal-stack/metal-lib/pkg/pointer"
 
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/cmd/helper"
@@ -25,7 +27,6 @@ func newVolumeCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.volumeFind()
 		},
-		PreRun: bindPFlags,
 	}
 	volumeDescribeCmd := &cobra.Command{
 		Use:   "describe <volume>",
@@ -34,7 +35,6 @@ func newVolumeCmd(c *config) *cobra.Command {
 			return c.volumeDescribe(args)
 		},
 		ValidArgsFunction: c.comp.VolumeListCompletion,
-		PreRun:            bindPFlags,
 	}
 	volumeDeleteCmd := &cobra.Command{
 		Use:     "delete <volume>",
@@ -44,17 +44,24 @@ func newVolumeCmd(c *config) *cobra.Command {
 			return c.volumeDelete(args)
 		},
 		ValidArgsFunction: c.comp.VolumeListCompletion,
-		PreRun:            bindPFlags,
+	}
+	volumeSetQoSCmd := &cobra.Command{
+		Use:     "set-qos <volume>",
+		Aliases: []string{"set-qos"},
+		Short:   "sets the qos policy of the volume",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.volumeSetQoS(args)
+		},
+		ValidArgsFunction: c.comp.VolumeListCompletion,
 	}
 	volumeManifestCmd := &cobra.Command{
 		Use:   "manifest <volume>",
 		Short: "print a manifest for a volume",
-		Long:  "this is only useful for volumes which are not used in any k8s cluster. With the PersistenVolumeClaim given you can reuse it in a new cluster.",
+		Long:  "this is only useful for volumes which are not used in any k8s cluster. With the PersistentVolumeClaim given you can reuse it in a new cluster.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.volumeManifest(args)
 		},
 		ValidArgsFunction: c.comp.VolumeListCompletion,
-		PreRun:            bindPFlags,
 	}
 	volumeEncryptionSecretManifestCmd := &cobra.Command{
 		Use:   "encryption-secret-manifest",
@@ -63,7 +70,6 @@ func newVolumeCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.volumeEncryptionSecretManifest()
 		},
-		PreRun: bindPFlags,
 	}
 	volumeClusterInfoCmd := &cobra.Command{
 		Use:   "clusterinfo",
@@ -71,7 +77,6 @@ func newVolumeCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.volumeClusterInfo()
 		},
-		PreRun: bindPFlags,
 	}
 
 	snapshotCmd := &cobra.Command{
@@ -86,7 +91,6 @@ func newVolumeCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.snapshotFind()
 		},
-		PreRun: bindPFlags,
 	}
 	snapshotDescribeCmd := &cobra.Command{
 		Use:   "describe <snapshot>",
@@ -94,7 +98,6 @@ func newVolumeCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.snapshotDescribe(args)
 		},
-		PreRun: bindPFlags,
 	}
 	snapshotDeleteCmd := &cobra.Command{
 		Use:     "delete <snapshot>",
@@ -103,7 +106,20 @@ func newVolumeCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.snapshotDelete(args)
 		},
-		PreRun: bindPFlags,
+	}
+
+	qosCmd := &cobra.Command{
+		Use:   "qos",
+		Short: "manage qos policies",
+		Long:  "list qos policies",
+	}
+	qosListCmd := &cobra.Command{
+		Use:     "list",
+		Short:   "list qos policies",
+		Aliases: []string{"ls"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.listQoSPolicies()
+		},
 	}
 
 	snapshotListCmd.Flags().StringP("snapshotid", "", "", "snapshotid to filter [optional]")
@@ -114,17 +130,20 @@ func newVolumeCmd(c *config) *cobra.Command {
 	snapshotDescribeCmd.Flags().StringP("project", "", "", "project to filter")
 	snapshotDeleteCmd.Flags().StringP("project", "", "", "project to filter")
 
-	must(snapshotListCmd.MarkFlagRequired("project"))
-	must(snapshotDescribeCmd.MarkFlagRequired("project"))
-	must(snapshotDeleteCmd.MarkFlagRequired("project"))
+	genericcli.Must(snapshotListCmd.MarkFlagRequired("project"))
+	genericcli.Must(snapshotDescribeCmd.MarkFlagRequired("project"))
+	genericcli.Must(snapshotDeleteCmd.MarkFlagRequired("project"))
 
-	must(snapshotListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
-	must(snapshotListCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+	genericcli.Must(snapshotListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(snapshotListCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
 
 	snapshotCmd.AddCommand(snapshotListCmd)
 	snapshotCmd.AddCommand(snapshotDescribeCmd)
 	snapshotCmd.AddCommand(snapshotDeleteCmd)
 	volumeCmd.AddCommand(snapshotCmd)
+
+	qosCmd.AddCommand(qosListCmd)
+	volumeCmd.AddCommand(qosCmd)
 
 	volumeCmd.AddCommand(volumeListCmd)
 	volumeCmd.AddCommand(volumeDeleteCmd)
@@ -132,6 +151,7 @@ func newVolumeCmd(c *config) *cobra.Command {
 	volumeCmd.AddCommand(volumeManifestCmd)
 	volumeCmd.AddCommand(volumeEncryptionSecretManifestCmd)
 	volumeCmd.AddCommand(volumeClusterInfoCmd)
+	volumeCmd.AddCommand(volumeSetQoSCmd)
 
 	volumeListCmd.Flags().StringP("volumeid", "", "", "volumeid to filter [optional]")
 	volumeListCmd.Flags().StringP("project", "", "", "project to filter [optional]")
@@ -139,18 +159,25 @@ func newVolumeCmd(c *config) *cobra.Command {
 	volumeListCmd.Flags().StringP("tenant", "", "", "tenant to filter [optional]")
 	volumeListCmd.Flags().Bool("only-unbound", false, "show only unbound volumes that are not connected to any hosts, pv may be still present. [optional]")
 
-	must(volumeListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
-	must(volumeListCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
-	must(volumeListCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
+	genericcli.Must(volumeListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(volumeListCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+	genericcli.Must(volumeListCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
 
 	volumeManifestCmd.Flags().StringP("name", "", "restored-pv", "name of the PersistentVolume")
 	volumeManifestCmd.Flags().StringP("namespace", "", "default", "namespace for the PersistentVolume")
+	volumeManifestCmd.Flags().StringP("storage-class-name", "", "", "the storage class for the PersistentVolume")
 
 	volumeEncryptionSecretManifestCmd.Flags().StringP("namespace", "", "default", "namespace for the PersistentVolume encryption secret")
 	volumeEncryptionSecretManifestCmd.Flags().StringP("passphrase", "", "please-change-me", "passphrase for the PersistentVolume encryption")
 
 	volumeClusterInfoCmd.Flags().StringP("partition", "", "", "partition to filter [optional]")
-	must(volumeClusterInfoCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+	genericcli.Must(volumeClusterInfoCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+
+	volumeSetQoSCmd.Flags().StringP("qos-id", "", "", "the id of the new qos policy of the volume")
+	volumeSetQoSCmd.Flags().StringP("qos-name", "", "", "the name of the new qos policy of the volume")
+
+	genericcli.Must(volumeSetQoSCmd.RegisterFlagCompletionFunc("qos-id", c.comp.PolicyIDListCompletion))
+	genericcli.Must(volumeSetQoSCmd.RegisterFlagCompletionFunc("qos-name", c.comp.PolicyNameListCompletion))
 
 	return volumeCmd
 }
@@ -173,7 +200,7 @@ func (c *config) volumeFind() error {
 		if viper.GetBool("only-unbound") {
 			volumes = onlyUnboundVolumes(volumes)
 		}
-		return output.New().Print(volumes)
+		return c.listPrinter.Print(volumes)
 	}
 	resp, err := c.cloud.Volume.ListVolumes(nil, nil)
 	if err != nil {
@@ -183,7 +210,7 @@ func (c *config) volumeFind() error {
 	if viper.GetBool("only-unbound") {
 		volumes = onlyUnboundVolumes(volumes)
 	}
-	return output.New().Print(volumes)
+	return c.listPrinter.Print(volumes)
 }
 
 func onlyUnboundVolumes(volumes []*models.V1VolumeResponse) (result []*models.V1VolumeResponse) {
@@ -202,7 +229,7 @@ func (c *config) volumeDescribe(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(vol)
+	return c.listPrinter.Print(vol)
 }
 
 func (c *config) volumeDelete(args []string) error {
@@ -231,7 +258,36 @@ If used in cronjob for example, volume might not be connected now, but required 
 		return err
 	}
 
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
+}
+
+func (c *config) volumeSetQoS(args []string) error {
+	id, err := genericcli.GetExactlyOneArg(args)
+	if err != nil {
+		return err
+	}
+	policyId := helper.ViperString("qos-id")
+	policyName := helper.ViperString("qos-name")
+
+	if pointer.SafeDeref(policyId) == "" && pointer.SafeDeref(policyName) == "" {
+		return fmt.Errorf("either qos-id or qos-name must be specified")
+	}
+	if pointer.SafeDeref(policyId) != "" && pointer.SafeDeref(policyName) != "" {
+		return fmt.Errorf("either qos-id or qos-name must be specified, not both")
+	}
+
+	params := volume.NewSetVolumeQoSPolicyParams().
+		WithID(id).
+		WithBody(&models.V1VolumeSetQoSPolicyRequest{
+			QoSPolicyID:   policyId,
+			QoSPolicyName: policyName,
+		})
+
+	resp, err := c.cloud.Volume.SetVolumeQoSPolicy(params, nil)
+	if err != nil {
+		return err
+	}
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) volumeClusterInfo() error {
@@ -240,7 +296,7 @@ func (c *config) volumeClusterInfo() error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) volumeManifest(args []string) error {
@@ -248,10 +304,18 @@ func (c *config) volumeManifest(args []string) error {
 	if err != nil {
 		return err
 	}
-	name := viper.GetString("name")
-	namespace := viper.GetString("namespace")
 
-	return output.VolumeManifest(*volume, name, namespace)
+	var (
+		name      = viper.GetString("name")
+		namespace = viper.GetString("namespace")
+		sc        = viper.GetString("storage-class-name")
+	)
+
+	if sc == "" {
+		return fmt.Errorf("a storage class name must be provided, this cannot be derived automatically")
+	}
+
+	return output.VolumeManifest(*volume, name, namespace, sc)
 }
 
 func (c *config) volumeEncryptionSecretManifest() error {
@@ -301,7 +365,7 @@ func (c *config) snapshotFind() error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) snapshotDescribe(args []string) error {
@@ -309,7 +373,7 @@ func (c *config) snapshotDescribe(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(snap)
+	return c.listPrinter.Print(snap)
 }
 
 func (c *config) snapshotDelete(args []string) error {
@@ -334,5 +398,13 @@ delete snapshot: %q, all data will be lost forever.
 		return err
 	}
 
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
+}
+
+func (c *config) listQoSPolicies() error {
+	resp, err := c.cloud.Volume.ListPolicies(volume.NewListPoliciesParams(), nil)
+	if err != nil {
+		return err
+	}
+	return c.listPrinter.Print(resp.Payload)
 }

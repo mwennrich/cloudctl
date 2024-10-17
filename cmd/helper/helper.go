@@ -8,9 +8,12 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/go-openapi/runtime"
+	"github.com/go-openapi/strfmt"
 	"gopkg.in/yaml.v3"
 	k8syaml "sigs.k8s.io/yaml"
 )
@@ -81,11 +84,11 @@ func Prompt(msg, compare string) error {
 	return nil
 }
 
-// Truncate will trim a string in the middle and replace it with elipsis
+// Truncate will trim a string in the middle and replace it with ellipsis
 // FIXME write a test
-func Truncate(input, elipsis string, maxlength int) string {
+func Truncate(input, ellipsis string, maxlength int) string {
 	il := len(input)
-	el := len(elipsis)
+	el := len(ellipsis)
 	if il <= maxlength {
 		return input
 	}
@@ -94,7 +97,7 @@ func Truncate(input, elipsis string, maxlength int) string {
 	}
 	startlength := ((maxlength - el) / 2) - el/2
 
-	output := input[:startlength] + elipsis
+	output := input[:startlength] + ellipsis
 	missing := maxlength - len(output)
 	output = output + input[il-missing:]
 	return output
@@ -143,7 +146,7 @@ func Edit(id string, getFunc func(id string) ([]byte, error), updateFunc func(fi
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(tmpfile.Name(), content, os.ModePerm)
+	err = os.WriteFile(tmpfile.Name(), content, os.ModePerm) //nolint:gosec
 	if err != nil {
 		return err
 	}
@@ -176,4 +179,22 @@ func MustPrintKubernetesResource(in any) {
 		panic(fmt.Errorf("unable to marshal to yaml: %w", err))
 	}
 	fmt.Printf("---\n%s", string(y))
+}
+
+func ClientNoAuth() runtime.ClientAuthInfoWriterFunc {
+	noAuth := func(_ runtime.ClientRequest, _ strfmt.Registry) error { return nil }
+	return runtime.ClientAuthInfoWriterFunc(noAuth)
+}
+
+func ExpandHomeDir(path string) (string, error) {
+	if !strings.HasPrefix(path, "~/") {
+		return path, nil
+	}
+
+	homedir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("unable to expand home dir: %w", err)
+	}
+
+	return filepath.Join(homedir, strings.TrimLeft(path, "~/")), nil
 }

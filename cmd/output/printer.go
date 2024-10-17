@@ -9,22 +9,21 @@ import (
 	"os"
 	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
-	"github.com/fi-ts/cloud-go/api/client/cluster"
+	"github.com/fatih/color"
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/pkg/api"
+	sprig "github.com/go-task/slim-sprig/v3"
+	"github.com/metal-stack/metal-lib/pkg/genericcli/printers"
 	"github.com/metal-stack/metal-lib/pkg/pointer"
 	"github.com/spf13/viper"
 
 	"github.com/olekukonko/tablewriter"
-	"gopkg.in/yaml.v3"
 )
 
 type (
 	// Printer main Interface for implementations which spits out to specified Writer
 	Printer interface {
 		Print(data interface{}) error
-		Type() string
 	}
 	tablePrinter struct {
 		table       *tablewriter.Table
@@ -38,14 +37,6 @@ type (
 		shortData   [][]string
 		wideData    [][]string
 		outWriter   io.Writer
-	}
-	// jsonPrinter returns the model in json format
-	jsonPrinter struct {
-		outWriter io.Writer
-	}
-	// yamlPrinter returns the model in yaml format
-	yamlPrinter struct {
-		outWriter io.Writer
 	}
 )
 
@@ -73,6 +64,9 @@ func (t *tablePrinter) render() {
 		}
 		for _, row := range rows {
 			if len(row) < 1 {
+				continue
+			}
+			if len(row[0]) == 0 {
 				continue
 			}
 			fmt.Println(row[0])
@@ -151,14 +145,10 @@ func newPrinter(format, order, tpl string, noHeaders bool, writer io.Writer) (Pr
 	var printer Printer
 	switch format {
 	case "yaml":
-		printer = &yamlPrinter{
-			outWriter: writer,
-		}
+		printer = printers.NewYAMLPrinter().WithOut(writer)
 	case "json":
-		printer = &jsonPrinter{
-			outWriter: writer,
-		}
-	case "table", "wide":
+		printer = printers.NewJSONPrinter().WithOut(writer)
+	case "table", "wide", "markdown":
 		printer = newTablePrinter(format, order, noHeaders, nil, writer)
 	case "template":
 		tmpl, err := template.New("t").Funcs(sprig.TxtFuncMap()).Parse(tpl)
@@ -169,6 +159,16 @@ func newPrinter(format, order, tpl string, noHeaders bool, writer io.Writer) (Pr
 	default:
 		return nil, fmt.Errorf("unknown format:%s", format)
 	}
+
+	if viper.IsSet("force-color") {
+		enabled := viper.GetBool("force-color")
+		if enabled {
+			color.NoColor = false
+		} else {
+			color.NoColor = true
+		}
+	}
+
 	return printer, nil
 }
 
@@ -242,7 +242,7 @@ func (t tablePrinter) Print(data interface{}) error {
 		TenantTablePrinter{t}.Print([]*models.V1TenantResponse{d})
 	case *models.RestHealthResponse:
 		HealthTablePrinter{t}.Print(d)
-	case map[string]models.RestHealthResult:
+	case map[string]models.RestHealthResponse:
 		HealthTablePrinter{t}.PrintServices(d)
 	case []*models.ModelsV1IPResponse:
 		IPTablePrinter{t}.Print(d)
@@ -254,6 +254,10 @@ func (t tablePrinter) Print(data interface{}) error {
 		ContainerBillingTablePrinter{t}.Print(d)
 	case *models.V1ClusterUsageResponse:
 		ClusterBillingTablePrinter{t}.Print(d)
+	case *models.V1MachineUsageResponse:
+		MachineBillingTablePrinter{t}.Print(d)
+	case *models.V1ProductOptionUsageResponse:
+		ProductOptionBillingTablePrinter{t}.Print(d)
 	case *models.V1IPUsageResponse:
 		IPBillingTablePrinter{t}.Print(d)
 	case *models.V1NetworkUsageResponse:
@@ -276,6 +280,10 @@ func (t tablePrinter) Print(data interface{}) error {
 		SnapshotTablePrinter{t}.Print(d)
 	case *models.V1SnapshotResponse:
 		SnapshotTablePrinter{t}.Print(pointer.WrapInSlice(d))
+	case []*models.V1QoSPolicyResponse:
+		QoSPolicyTablePrinter{t}.Print(d)
+	case *models.V1QoSPolicyResponse:
+		QoSPolicyTablePrinter{t}.Print(pointer.WrapInSlice(d))
 	case []*models.V1StorageClusterInfo:
 		VolumeClusterInfoTablePrinter{t}.Print(d)
 	case models.V1PostgresPartitionsResponse:
@@ -294,54 +302,10 @@ func (t tablePrinter) Print(data interface{}) error {
 		PostgresBackupEntryTablePrinter{t}.Print(d)
 	case []*models.V1S3PartitionResponse:
 		S3PartitionTablePrinter{t}.Print(d)
-	case *models.V1ClusterMonitoringSecretResponse:
-		return yamlPrinter{
-			outWriter: t.outWriter,
-		}.Print(d)
-	case *models.V1S3CredentialsResponse, *models.V1S3Response:
-		return yamlPrinter{
-			outWriter: t.outWriter,
-		}.Print(d)
 	case *api.Contexts:
 		ContextPrinter{t}.Print(d)
-	case api.Version:
-		return yamlPrinter{
-			outWriter: t.outWriter,
-		}.Print(d)
-	case *cluster.ListConstraintsOK:
-		return yamlPrinter{
-			outWriter: t.outWriter,
-		}.Print(d)
 	default:
 		return fmt.Errorf("unknown table printer for type: %T", d)
 	}
 	return nil
-}
-
-// Print a model in json format
-func (j jsonPrinter) Print(data interface{}) error {
-	json, err := json.MarshalIndent(data, "", "    ")
-	if err != nil {
-		return fmt.Errorf("unable to marshal to json:%w", err)
-	}
-	fmt.Fprintf(j.outWriter, "%s\n", string(json))
-	return nil
-}
-
-func (j jsonPrinter) Type() string {
-	return "json"
-}
-
-// Print a model in yaml format
-func (y yamlPrinter) Print(data interface{}) error {
-	yml, err := yaml.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("unable to marshal to yaml:%w", err)
-	}
-	fmt.Fprintf(y.outWriter, "%s", string(yml))
-	return nil
-}
-
-func (y yamlPrinter) Type() string {
-	return "yaml"
 }

@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/fi-ts/cloud-go/api/client/ip"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
 	"github.com/metal-stack/metal-lib/pkg/pointer"
 
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/cmd/helper"
-	"github.com/fi-ts/cloudctl/cmd/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -16,8 +16,8 @@ import (
 func newIPCmd(c *config) *cobra.Command {
 	ipCmd := &cobra.Command{
 		Use:   "ip",
-		Short: "manage ips",
-		Long:  "TODO",
+		Short: "manage IPs",
+		Long:  "manage static IP addresses for your projects, which can be utilized for the service type load balancer of your clusters.",
 	}
 	ipListCmd := &cobra.Command{
 		Use:     "list",
@@ -26,7 +26,6 @@ func newIPCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.ipList()
 		},
-		PreRun: bindPFlags,
 	}
 	ipStaticCmd := &cobra.Command{
 		Use:   "static <ip>",
@@ -34,7 +33,6 @@ func newIPCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.ipStatic(args)
 		},
-		PreRun: bindPFlags,
 	}
 	ipAllocateCmd := &cobra.Command{
 		Use:   "allocate <ip>",
@@ -42,7 +40,6 @@ func newIPCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.ipAllocate()
 		},
-		PreRun: bindPFlags,
 	}
 	ipFreeCmd := &cobra.Command{
 		Use:     "delete <ip>",
@@ -51,7 +48,6 @@ func newIPCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.ipFree(args)
 		},
-		PreRun: bindPFlags,
 	}
 
 	ipCmd.AddCommand(ipListCmd)
@@ -65,13 +61,13 @@ func newIPCmd(c *config) *cobra.Command {
 	ipListCmd.Flags().StringP("machineid", "", "", "machineid to filter [optional]")
 	ipListCmd.Flags().StringP("network", "", "", "network to filter [optional]")
 
-	must(ipListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
-	must(ipListCmd.RegisterFlagCompletionFunc("network", c.comp.NetworkListCompletion))
+	genericcli.Must(ipListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(ipListCmd.RegisterFlagCompletionFunc("network", c.comp.NetworkListCompletion))
 
 	ipStaticCmd.Flags().StringP("name", "", "", "set name of the ip address [required]")
 	ipStaticCmd.Flags().StringP("description", "", "", "set description of the ip address [required]")
-	must(ipStaticCmd.MarkFlagRequired("name"))
-	must(ipStaticCmd.MarkFlagRequired("description"))
+	genericcli.Must(ipStaticCmd.MarkFlagRequired("name"))
+	genericcli.Must(ipStaticCmd.MarkFlagRequired("description"))
 
 	ipAllocateCmd.Flags().StringP("name", "", "", "set name of the ip address [required]")
 	ipAllocateCmd.Flags().StringP("description", "", "", "set description of the ip address [required]")
@@ -79,11 +75,11 @@ func newIPCmd(c *config) *cobra.Command {
 	ipAllocateCmd.Flags().StringP("network", "", "", "the network of the ip address [required]")
 	ipAllocateCmd.Flags().StringP("project", "", "", "the project of the ip address [required]")
 	ipAllocateCmd.Flags().StringSliceP("tags", "", []string{}, "set tags of the ip address [optional]")
-	must(ipAllocateCmd.MarkFlagRequired("name"))
-	must(ipAllocateCmd.MarkFlagRequired("description"))
-	must(ipAllocateCmd.MarkFlagRequired("network"))
-	must(ipAllocateCmd.MarkFlagRequired("project"))
-	must(ipAllocateCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(ipAllocateCmd.MarkFlagRequired("name"))
+	genericcli.Must(ipAllocateCmd.MarkFlagRequired("description"))
+	genericcli.Must(ipAllocateCmd.MarkFlagRequired("network"))
+	genericcli.Must(ipAllocateCmd.MarkFlagRequired("project"))
+	genericcli.Must(ipAllocateCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
 
 	return ipCmd
 }
@@ -103,13 +99,13 @@ func (c *config) ipList() error {
 		if err != nil {
 			return err
 		}
-		return output.New().Print(resp.Payload)
+		return c.listPrinter.Print(resp.Payload)
 	}
 	resp, err := c.cloud.IP.ListIPs(nil, nil)
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) ipStatic(args []string) error {
@@ -143,7 +139,7 @@ func (c *config) ipStatic(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.describePrinter.Print(resp.Payload)
 }
 
 func (c *config) ipAllocate() error {
@@ -174,7 +170,7 @@ func (c *config) ipAllocate() error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.describePrinter.Print(resp.Payload)
 }
 
 func (c *config) ipFree(args []string) error {
@@ -190,7 +186,7 @@ func (c *config) ipFree(args []string) error {
 		return err
 	}
 
-	return output.New().Print(resp.Payload)
+	return c.describePrinter.Print(resp.Payload)
 }
 
 func (c *config) getIPFromArgs(args []string) (string, error) {

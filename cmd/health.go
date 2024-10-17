@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/fi-ts/cloud-go/api/client/health"
-	"github.com/fi-ts/cloudctl/cmd/output"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
 	"github.com/spf13/cobra"
 )
 
@@ -25,13 +25,12 @@ func newHealthCmd(c *config) *cobra.Command {
 				}
 			}
 
-			must(output.New().Print(resp.Payload))
+			genericcli.Must(c.listPrinter.Print(resp.Payload))
 
 			fmt.Println()
 
-			return output.New().Print(resp.Payload.Services)
+			return c.listPrinter.Print(resp.Payload.Services)
 		},
-		PreRun: bindPFlags,
 	}
 	return healthCmd
 }

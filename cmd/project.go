@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/fi-ts/cloud-go/api/models"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
 	"gopkg.in/yaml.v3"
 
 	"github.com/fi-ts/cloud-go/api/client/project"
 	"github.com/fi-ts/cloudctl/cmd/helper"
-	"github.com/fi-ts/cloudctl/cmd/output"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -28,7 +28,6 @@ func newProjectCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.projectCreate()
 		},
-		PreRun: bindPFlags,
 	}
 	projectDescribeCmd := &cobra.Command{
 		Use:   "describe <projectID>",
@@ -36,7 +35,6 @@ func newProjectCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.projectDescribe(args)
 		},
-		PreRun:            bindPFlags,
 		ValidArgsFunction: c.comp.ProjectListCompletion,
 	}
 	projectDeleteCmd := &cobra.Command{
@@ -46,7 +44,6 @@ func newProjectCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.projectDelete(args)
 		},
-		PreRun:            bindPFlags,
 		ValidArgsFunction: c.comp.ProjectListCompletion,
 	}
 	projectApplyCmd := &cobra.Command{
@@ -55,7 +52,6 @@ func newProjectCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.projectApply()
 		},
-		PreRun: bindPFlags,
 	}
 	projectEditCmd := &cobra.Command{
 		Use:   "edit <projectID>",
@@ -63,7 +59,6 @@ func newProjectCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.projectEdit(args)
 		},
-		PreRun:            bindPFlags,
 		ValidArgsFunction: c.comp.ProjectListCompletion,
 	}
 	projectListCmd := &cobra.Command{
@@ -73,7 +68,6 @@ func newProjectCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.projectList()
 		},
-		PreRun: bindPFlags,
 	}
 
 	projectCreateCmd.Flags().String("name", "", "name of the project, max 10 characters. [required]")
@@ -84,14 +78,14 @@ func newProjectCmd(c *config) *cobra.Command {
 	projectCreateCmd.Flags().Int32("cluster-quota", 0, "cluster quota")
 	projectCreateCmd.Flags().Int32("machine-quota", 0, "machine quota")
 	projectCreateCmd.Flags().Int32("ip-quota", 0, "ip quota")
-	must(projectCreateCmd.MarkFlagRequired("name"))
-	must(projectCreateCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
+	genericcli.Must(projectCreateCmd.MarkFlagRequired("name"))
+	genericcli.Must(projectCreateCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
 
 	projectListCmd.Flags().String("id", "", "show projects of given id")
 	projectListCmd.Flags().String("name", "", "show projects of given name")
 	projectListCmd.Flags().String("tenant", "", "show projects of given tenant")
-	must(projectListCmd.RegisterFlagCompletionFunc("id", c.comp.ProjectListCompletion))
-	must(projectListCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
+	genericcli.Must(projectListCmd.RegisterFlagCompletionFunc("id", c.comp.ProjectListCompletion))
+	genericcli.Must(projectListCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
 
 	projectApplyCmd.Flags().StringP("file", "f", "", `filename of the create or update request in yaml format, or - for stdin.
 	Example project update:
@@ -110,6 +104,7 @@ func newProjectCmd(c *config) *cobra.Command {
 	projectCmd.AddCommand(projectListCmd)
 	projectCmd.AddCommand(projectApplyCmd)
 	projectCmd.AddCommand(projectEditCmd)
+	projectCmd.AddCommand(newMachineReservationsCmd(c))
 
 	return projectCmd
 }
@@ -163,7 +158,7 @@ func (c *config) projectCreate() error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 
 func (c *config) projectDescribe(args []string) error {
@@ -179,7 +174,7 @@ func (c *config) projectDescribe(args []string) error {
 		return err
 	}
 
-	return output.New().Print(p.Payload)
+	return c.listPrinter.Print(p.Payload)
 }
 
 func (c *config) projectDelete(args []string) error {
@@ -195,7 +190,7 @@ func (c *config) projectDelete(args []string) error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 
 func (c *config) projectList() error {
@@ -214,7 +209,7 @@ func (c *config) projectList() error {
 			return err
 		}
 
-		return output.New().Print(response.Payload.Projects)
+		return c.listPrinter.Print(response.Payload.Projects)
 	}
 
 	request := project.NewListProjectsParams()
@@ -222,7 +217,7 @@ func (c *config) projectList() error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(response.Payload.Projects)
+	return c.listPrinter.Print(response.Payload.Projects)
 }
 
 func (c *config) projectID(verb string, args []string) (string, error) {
@@ -299,7 +294,7 @@ func (c *config) projectApply() error {
 			continue
 		}
 	}
-	return output.New().Print(response)
+	return c.listPrinter.Print(response)
 }
 
 func (c *config) projectEdit(args []string) error {
@@ -335,7 +330,7 @@ func (c *config) projectEdit(args []string) error {
 		if err != nil {
 			return err
 		}
-		return output.New().Print(uresp.Payload)
+		return c.listPrinter.Print(uresp.Payload)
 	}
 
 	return helper.Edit(id, getFunc, updateFunc)

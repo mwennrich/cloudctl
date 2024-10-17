@@ -20,6 +20,14 @@ type (
 	ClusterBillingTablePrinter struct {
 		tablePrinter
 	}
+	// MachineBillingTablePrinter print bills in a Table
+	MachineBillingTablePrinter struct {
+		tablePrinter
+	}
+	// ProductOptionBillingTablePrinter print bills in a Table
+	ProductOptionBillingTablePrinter struct {
+		tablePrinter
+	}
 	// ContainerBillingTablePrinter print bills in a Table
 	ContainerBillingTablePrinter struct {
 		tablePrinter
@@ -195,10 +203,173 @@ func (s ClusterBillingTablePrinter) Print(data *models.V1ClusterUsageResponse) {
 	s.render()
 }
 
+// Print a machine usage as table
+func (s MachineBillingTablePrinter) Print(data *models.V1MachineUsageResponse) {
+	s.wideHeader = []string{"Tenant", "From", "To", "ProjectID", "ProjectName", "Partition", "Size", "MachineID", "MachineName", "ClusterID", "MachineStart", "Lifetime"}
+	s.shortHeader = s.wideHeader
+
+	if s.order == "" {
+		s.order = "tenant,project,partition,name,id"
+	}
+	s.Order(data.Usage)
+
+	for _, u := range data.Usage {
+		var from string
+		if data.From != nil {
+			from = data.From.String()
+		}
+		var to string
+		if !time.Time(data.To).IsZero() {
+			to = data.To.String()
+		}
+		var tenant string
+		if u.Tenant != nil {
+			tenant = *u.Tenant
+		}
+		var projectID string
+		if u.Projectid != nil {
+			projectID = *u.Projectid
+		}
+		var projectName string
+		if u.Projectname != nil {
+			projectName = *u.Projectname
+		}
+		var partition string
+		if u.Partition != nil {
+			partition = *u.Partition
+		}
+		var machineID string
+		if u.Machineid != nil {
+			machineID = *u.Machineid
+		}
+		var machineName string
+		if u.Machinename != nil {
+			machineName = *u.Machinename
+		}
+		var sizeid string
+		if u.Sizeid != nil {
+			sizeid = *u.Sizeid
+		}
+		var clusterID string
+		if u.Clusterid != nil {
+			clusterID = *u.Clusterid
+		}
+		var machineStart string
+		if u.Machinestart != nil {
+			machineStart = u.Machinestart.String()
+		}
+		var lifetime time.Duration
+		if u.Lifetime != nil {
+			lifetime = time.Duration(*u.Lifetime)
+		}
+
+		row := []string{
+			tenant,
+			from,
+			to,
+			projectID,
+			projectName,
+			partition,
+			sizeid,
+			machineID,
+			machineName,
+			clusterID,
+			machineStart,
+			humanizeDuration(lifetime),
+		}
+
+		s.addWideData(row, data)
+		s.addShortData(row, data)
+	}
+
+	footer := []string{"Total",
+		humanizeDuration(time.Duration(*data.Accumulatedusage.Lifetime)) + lifetimeCosts(*data.Accumulatedusage.Lifetime), "", "",
+	}
+	shortFooter := make([]string, len(s.shortHeader)-len(footer))
+	wideFooter := make([]string, len(s.wideHeader)-len(footer))
+	s.addWideData(append(wideFooter, footer...), data)   // nolint:makezero
+	s.addShortData(append(shortFooter, footer...), data) // nolint:makezero
+	s.render()
+}
+
+// Print a product option usage as table
+func (s ProductOptionBillingTablePrinter) Print(data *models.V1ProductOptionUsageResponse) {
+	s.wideHeader = []string{"Tenant", "From", "To", "ProjectID", "ProjectName", "Option", "ClusterID", "ClusterName", "Lifetime"}
+	s.shortHeader = s.wideHeader
+
+	if s.order == "" {
+		s.order = "tenant,project,partition,name,id"
+	}
+	s.Order(data.Usage)
+
+	for _, u := range data.Usage {
+		var from string
+		if data.From != nil {
+			from = data.From.String()
+		}
+		var to string
+		if !time.Time(data.To).IsZero() {
+			to = data.To.String()
+		}
+		var option string
+		if u.ID != nil {
+			option = *u.ID
+		}
+		var tenant string
+		if u.Tenant != nil {
+			tenant = *u.Tenant
+		}
+		var projectID string
+		if u.Projectid != nil {
+			projectID = *u.Projectid
+		}
+		var projectName string
+		if u.Projectname != nil {
+			projectName = *u.Projectname
+		}
+		var clusterID string
+		if u.Clusterid != nil {
+			clusterID = *u.Clusterid
+		}
+		var clusterName string
+		if u.Clustername != nil {
+			clusterName = *u.Clustername
+		}
+		var lifetime time.Duration
+		if u.Lifetime != nil {
+			lifetime = time.Duration(*u.Lifetime)
+		}
+
+		row := []string{
+			tenant,
+			from,
+			to,
+			projectID,
+			projectName,
+			option,
+			clusterID,
+			clusterName,
+			humanizeDuration(lifetime),
+		}
+
+		s.addWideData(row, data)
+		s.addShortData(row, data)
+	}
+
+	footer := []string{"Total",
+		humanizeDuration(time.Duration(*data.Accumulatedusage.Lifetime)) + lifetimeCosts(*data.Accumulatedusage.Lifetime), "", "",
+	}
+	shortFooter := make([]string, len(s.shortHeader)-len(footer))
+	wideFooter := make([]string, len(s.wideHeader)-len(footer))
+	s.addWideData(append(wideFooter, footer...), data)   // nolint:makezero
+	s.addShortData(append(shortFooter, footer...), data) // nolint:makezero
+	s.render()
+}
+
 // Print a volume usage as table
 func (s VolumeBillingTablePrinter) Print(data *models.V1VolumeUsageResponse) {
-	s.wideHeader = []string{"Tenant", "From", "To", "ProjectID", "ProjectName", "Partition", "ClusterID", "ClusterName", "Start", "End", "Class", "UUID", "Name", "Type", "CapacitySeconds (Gi * h)", "Lifetime"}
-	s.shortHeader = []string{"Tenant", "ProjectID", "Partition", "ClusterName", "Class", "UUID", "Name", "Type", "CapacitySeconds (Gi * h)", "Lifetime"}
+	s.wideHeader = []string{"Tenant", "From", "To", "ProjectID", "ProjectName", "Partition", "ClusterID", "ClusterName", "Start", "End", "UUID", "Name", "Type", "CapacitySeconds (Gi * h)", "Lifetime"}
+	s.shortHeader = []string{"Tenant", "ProjectID", "Partition", "ClusterName", "UUID", "Name", "Type", "CapacitySeconds (Gi * h)", "Lifetime"}
 	if s.order == "" {
 		s.order = "tenant,project,partition,cluster,name"
 	}
@@ -244,10 +415,6 @@ func (s VolumeBillingTablePrinter) Print(data *models.V1VolumeUsageResponse) {
 		if u.End != nil {
 			end = u.End.String()
 		}
-		var class string
-		if u.Class != nil {
-			class = *u.Class
-		}
 		var name string
 		if u.Name != nil {
 			name = *u.Name
@@ -279,7 +446,6 @@ func (s VolumeBillingTablePrinter) Print(data *models.V1VolumeUsageResponse) {
 			clusterName,
 			start,
 			end,
-			class,
 			uuid,
 			name,
 			volumeType,
@@ -291,7 +457,6 @@ func (s VolumeBillingTablePrinter) Print(data *models.V1VolumeUsageResponse) {
 			projectID,
 			partition,
 			clusterName,
-			class,
 			uuid,
 			name,
 			volumeType,

@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/fi-ts/cloud-go/api/models"
-	"github.com/fi-ts/cloudctl/cmd/output"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
 
 	"github.com/fi-ts/cloud-go/api/client/s3"
 	"github.com/spf13/cobra"
@@ -15,7 +17,7 @@ func newS3Cmd(c *config) *cobra.Command {
 	s3Cmd := &cobra.Command{
 		Use:   "s3",
 		Short: "manage s3",
-		Long:  "manges access to s3 storage located in different partitions",
+		Long:  "manages access to s3 storage located in different partitions",
 	}
 	s3DescribeCmd := &cobra.Command{
 		Use:   "describe",
@@ -23,7 +25,6 @@ func newS3Cmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.s3Describe()
 		},
-		PreRun: bindPFlags,
 	}
 	s3CreateCmd := &cobra.Command{
 		Use:   "create",
@@ -31,7 +32,6 @@ func newS3Cmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.s3Create()
 		},
-		PreRun: bindPFlags,
 	}
 	s3DeleteCmd := &cobra.Command{
 		Use:     "delete",
@@ -40,7 +40,6 @@ func newS3Cmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.s3Delete()
 		},
-		PreRun: bindPFlags,
 	}
 	s3ListCmd := &cobra.Command{
 		Use:     "list",
@@ -49,7 +48,6 @@ func newS3Cmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.s3List()
 		},
-		PreRun: bindPFlags,
 	}
 	s3PartitionListCmd := &cobra.Command{
 		Use:     "partitions",
@@ -58,7 +56,6 @@ func newS3Cmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.s3ListPartitions()
 		},
-		PreRun: bindPFlags,
 	}
 	s3AddKeyCmd := &cobra.Command{
 		Use:   "add-key",
@@ -66,7 +63,6 @@ func newS3Cmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.s3AddKey()
 		},
-		PreRun: bindPFlags,
 	}
 	s3RemoveKeyCmd := &cobra.Command{
 		Use:   "remove-key",
@@ -74,7 +70,6 @@ func newS3Cmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.s3RemoveKey()
 		},
-		PreRun: bindPFlags,
 	}
 
 	s3CreateCmd.Flags().StringP("id", "i", "", "id of the s3 user [required]")
@@ -85,38 +80,38 @@ func newS3Cmd(c *config) *cobra.Command {
 	s3CreateCmd.Flags().Int64("max-buckets", 0, "maximum number of buckets for the s3 user")
 	s3CreateCmd.Flags().StringP("access-key", "", "", "specify the access key, otherwise will be generated")
 	s3CreateCmd.Flags().StringP("secret-key", "", "", "specify the secret key, otherwise will be generated")
-	must(s3CreateCmd.MarkFlagRequired("id"))
-	must(s3CreateCmd.MarkFlagRequired("partition"))
-	must(s3CreateCmd.MarkFlagRequired("project"))
-	must(s3CreateCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
-	must(s3CreateCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(s3CreateCmd.MarkFlagRequired("id"))
+	genericcli.Must(s3CreateCmd.MarkFlagRequired("partition"))
+	genericcli.Must(s3CreateCmd.MarkFlagRequired("project"))
+	genericcli.Must(s3CreateCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
+	genericcli.Must(s3CreateCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
 
 	s3ListCmd.Flags().StringP("partition", "p", "", "name of s3 partition.")
 	s3ListCmd.Flags().String("project", "", "id of the project that the s3 user belongs to")
-	must(s3ListCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
-	must(s3ListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(s3ListCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
+	genericcli.Must(s3ListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
 
 	s3DescribeCmd.Flags().StringP("id", "i", "", "id of the s3 user [required]")
 	s3DescribeCmd.Flags().StringP("partition", "p", "", "name of s3 partition where this user is in [required]")
 	s3DescribeCmd.Flags().String("project", "", "id of the project that the s3 user belongs to [required]")
 	s3DescribeCmd.Flags().StringP("tenant", "t", "", "tenant of the s3 user, defaults to logged in tenant")
 	s3DescribeCmd.Flags().StringP("for-client", "", "", "output suitable client configuration for either minio|s3cmd")
-	must(s3DescribeCmd.MarkFlagRequired("id"))
-	must(s3DescribeCmd.MarkFlagRequired("partition"))
-	must(s3DescribeCmd.MarkFlagRequired("project"))
-	must(s3DescribeCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
-	must(s3DescribeCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(s3DescribeCmd.MarkFlagRequired("id"))
+	genericcli.Must(s3DescribeCmd.MarkFlagRequired("partition"))
+	genericcli.Must(s3DescribeCmd.MarkFlagRequired("project"))
+	genericcli.Must(s3DescribeCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
+	genericcli.Must(s3DescribeCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
 
 	s3DeleteCmd.Flags().StringP("id", "i", "", "id of the s3 user [required]")
 	s3DeleteCmd.Flags().StringP("partition", "p", "", "name of s3 partition where this user is in [required]")
 	s3DeleteCmd.Flags().String("project", "", "id of the project that the s3 user belongs to [required]")
 	s3DeleteCmd.Flags().StringP("tenant", "t", "", "tenant of the s3 user, defaults to logged in tenant")
 	s3DeleteCmd.Flags().Bool("force", false, "forces s3 user deletion along with buckets and bucket objects even if those still exist (dangerous!)")
-	must(s3DeleteCmd.MarkFlagRequired("id"))
-	must(s3DeleteCmd.MarkFlagRequired("partition"))
-	must(s3DeleteCmd.MarkFlagRequired("project"))
-	must(s3DeleteCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
-	must(s3DeleteCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(s3DeleteCmd.MarkFlagRequired("id"))
+	genericcli.Must(s3DeleteCmd.MarkFlagRequired("partition"))
+	genericcli.Must(s3DeleteCmd.MarkFlagRequired("project"))
+	genericcli.Must(s3DeleteCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
+	genericcli.Must(s3DeleteCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
 
 	s3AddKeyCmd.Flags().StringP("id", "i", "", "id of the s3 user [required]")
 	s3AddKeyCmd.Flags().StringP("partition", "p", "", "name of s3 partition where this user is in [required]")
@@ -124,22 +119,22 @@ func newS3Cmd(c *config) *cobra.Command {
 	s3AddKeyCmd.Flags().StringP("tenant", "t", "", "tenant of the s3 user, defaults to logged in tenant")
 	s3AddKeyCmd.Flags().StringP("access-key", "", "", "specify the access key, otherwise will be generated")
 	s3AddKeyCmd.Flags().StringP("secret-key", "", "", "specify the secret key, otherwise will be generated")
-	must(s3AddKeyCmd.MarkFlagRequired("id"))
-	must(s3AddKeyCmd.MarkFlagRequired("partition"))
-	must(s3AddKeyCmd.MarkFlagRequired("project"))
-	must(s3AddKeyCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
-	must(s3AddKeyCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(s3AddKeyCmd.MarkFlagRequired("id"))
+	genericcli.Must(s3AddKeyCmd.MarkFlagRequired("partition"))
+	genericcli.Must(s3AddKeyCmd.MarkFlagRequired("project"))
+	genericcli.Must(s3AddKeyCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
+	genericcli.Must(s3AddKeyCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
 
 	s3RemoveKeyCmd.Flags().StringP("id", "i", "", "id of the s3 user [required]")
 	s3RemoveKeyCmd.Flags().StringP("partition", "p", "", "name of s3 partition where this user is in [required]")
 	s3RemoveKeyCmd.Flags().String("project", "", "id of the project that the s3 user belongs to [required]")
 	s3RemoveKeyCmd.Flags().StringP("tenant", "t", "", "tenant of the s3 user, defaults to logged in tenant")
 	s3RemoveKeyCmd.Flags().StringP("access-key", "", "", "specify the access key to delete the access / secret key pair")
-	must(s3RemoveKeyCmd.MarkFlagRequired("id"))
-	must(s3RemoveKeyCmd.MarkFlagRequired("partition"))
-	must(s3RemoveKeyCmd.MarkFlagRequired("project"))
-	must(s3RemoveKeyCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
-	must(s3RemoveKeyCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(s3RemoveKeyCmd.MarkFlagRequired("id"))
+	genericcli.Must(s3RemoveKeyCmd.MarkFlagRequired("partition"))
+	genericcli.Must(s3RemoveKeyCmd.MarkFlagRequired("project"))
+	genericcli.Must(s3RemoveKeyCmd.RegisterFlagCompletionFunc("partition", c.comp.S3ListPartitionsCompletion))
+	genericcli.Must(s3RemoveKeyCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
 
 	s3Cmd.AddCommand(s3CreateCmd)
 	s3Cmd.AddCommand(s3DescribeCmd)
@@ -193,7 +188,7 @@ func (c *config) s3Describe() error {
 	default:
 		return fmt.Errorf("unsupported s3 client configuration:%s", client)
 	}
-	return output.New().Print(response.Payload)
+	return c.describePrinter.Print(response.Payload)
 }
 
 func (c *config) s3Create() error {
@@ -230,7 +225,7 @@ func (c *config) s3Create() error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.describePrinter.Print(response.Payload)
 }
 
 func (c *config) s3Delete() error {
@@ -253,10 +248,13 @@ func (c *config) s3Delete() error {
 
 	response, err := c.cloud.S3.Deletes3(request, nil)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("the server took too long to respond. for s3 users with a lot of data the deletion may take longer than configured request timeout. please check again if the deletion was carried out successfully at a later point in time.")
+		}
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.describePrinter.Print(response.Payload)
 }
 
 func (c *config) s3AddKey() error {
@@ -288,7 +286,7 @@ func (c *config) s3AddKey() error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.describePrinter.Print(response.Payload)
 }
 
 func (c *config) s3RemoveKey() error {
@@ -316,7 +314,7 @@ func (c *config) s3RemoveKey() error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.describePrinter.Print(response.Payload)
 }
 
 func (c *config) s3List() error {
@@ -336,7 +334,7 @@ func (c *config) s3List() error {
 	}
 
 	if project == "" {
-		return output.New().Print(response.Payload)
+		return c.listPrinter.Print(response.Payload)
 	}
 
 	var result []*models.V1S3Response
@@ -345,7 +343,7 @@ func (c *config) s3List() error {
 			result = append(result, s3)
 		}
 	}
-	return output.New().Print(result)
+	return c.listPrinter.Print(result)
 }
 
 func (c *config) s3ListPartitions() error {
@@ -355,5 +353,5 @@ func (c *config) s3ListPartitions() error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(response.Payload)
+	return c.listPrinter.Print(response.Payload)
 }

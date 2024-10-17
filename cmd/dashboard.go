@@ -21,12 +21,12 @@ import (
 	"github.com/fi-ts/cloud-go/api/client/volume"
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/cmd/helper"
-	"github.com/fi-ts/cloudctl/cmd/output"
 	"github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/metal-stack/metal-lib/pkg/cache"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
+	"github.com/metal-stack/metal-lib/pkg/healthstatus"
 	"github.com/metal-stack/metal-lib/pkg/pointer"
-	"github.com/metal-stack/metal-lib/rest"
 	"github.com/metal-stack/v"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -46,7 +46,6 @@ func newDashboardCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDashboard(c.cloud)
 		},
-		PreRun: bindPFlags,
 	}
 
 	tabs := dashboardTabs(nil, nil, nil)
@@ -58,16 +57,16 @@ func newDashboardCmd(c *config) *cobra.Command {
 	dashboardCmd.Flags().String("initial-tab", strings.ToLower(tabs[0].Name()), "the tab to show when starting the dashboard [optional]")
 	dashboardCmd.Flags().Duration("refresh-interval", 3*time.Second, "refresh interval [optional]")
 
-	must(dashboardCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
-	must(dashboardCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
-	must(dashboardCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
-	must(dashboardCmd.RegisterFlagCompletionFunc("color-theme", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	genericcli.Must(dashboardCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+	genericcli.Must(dashboardCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
+	genericcli.Must(dashboardCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
+	genericcli.Must(dashboardCmd.RegisterFlagCompletionFunc("color-theme", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{
 			"default\twith bright fonts, optimized for dark terminal backgrounds",
 			"dark\twith dark fonts, optimized for bright terminal backgrounds",
 		}, cobra.ShellCompDirectiveNoFileComp
 	}))
-	must(dashboardCmd.RegisterFlagCompletionFunc("initial-tab", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	genericcli.Must(dashboardCmd.RegisterFlagCompletionFunc("initial-tab", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var names []string
 		for _, t := range tabs {
 			names = append(names, fmt.Sprintf("%s\t%s", strings.ToLower(t.Name()), t.Description()))
@@ -297,6 +296,7 @@ func (d *dashboard) Render() {
 		apiVersion       = "unknown"
 		apiHealth        = "unknown"
 		apiHealthMessage string
+		releaseVersion   = "unknown"
 
 		lastErr error
 	)
@@ -304,11 +304,11 @@ func (d *dashboard) Render() {
 	defer func() {
 		var coloredHealth string
 		switch apiHealth {
-		case string(rest.HealthStatusHealthy):
+		case string(healthstatus.HealthStatusHealthy):
 			coloredHealth = "[" + apiHealth + "](fg:green)"
-		case string(rest.HealthStatusDegraded), string(rest.HealthStatusPartiallyUnhealthy):
+		case string(healthstatus.HealthStatusDegraded), string(healthstatus.HealthStatusPartiallyUnhealthy):
 			coloredHealth = "[" + apiHealth + "](fg:yellow)"
-		case string(rest.HealthStatusUnhealthy):
+		case string(healthstatus.HealthStatusUnhealthy):
 			if apiHealthMessage != "" {
 				coloredHealth = "[" + apiHealth + fmt.Sprintf(" (%s)](fg:red)", apiHealthMessage)
 			} else {
@@ -318,7 +318,7 @@ func (d *dashboard) Render() {
 			coloredHealth = apiHealth
 		}
 
-		versionLine := fmt.Sprintf("cloud-api %s (API Health: %s), cloudctl %s (%s)", apiVersion, coloredHealth, v.Version, v.GitSHA1)
+		versionLine := fmt.Sprintf("cloud-api %s (API Health: %s), cloudctl %s (%s), release %s", apiVersion, coloredHealth, v.Version, v.GitSHA1, releaseVersion)
 		fetchInfoLine := fmt.Sprintf("Last Update: %s", time.Now().Format("15:04:05"))
 		if lastErr != nil {
 			fetchInfoLine += fmt.Sprintf(", [Update Error: %s](fg:red)", lastErr)
@@ -338,6 +338,7 @@ func (d *dashboard) Render() {
 		return
 	}
 	apiVersion = *infoResp.Payload.Version
+	releaseVersion = infoResp.Payload.ReleaseVersion
 
 	healthResp, err := d.cloud.Health.Health(health.NewHealthParams().WithContext(ctx), nil)
 	if err != nil {
@@ -1264,9 +1265,9 @@ func newCache(cloud *client.CloudAPI, expiration time.Duration, partition, tenan
 	return &apiCache{
 		clusters: cache.New(expiration, func(ctx context.Context, _ string) ([]*models.V1ClusterResponse, error) {
 			resp, err := cloud.Cluster.FindClusters(cluster.NewFindClustersParams().WithBody(&models.V1ClusterFindRequest{
-				PartitionID: output.StrDeref(partition),
-				Tenant:      output.StrDeref(tenant),
-				Purpose:     output.StrDeref(purpose),
+				PartitionID: pointer.PointerOrNil(partition),
+				Tenant:      pointer.PointerOrNil(tenant),
+				Purpose:     pointer.PointerOrNil(purpose),
 			}).WithReturnMachines(pointer.Pointer(false)).WithContext(ctx), nil)
 			if err != nil {
 				return nil, err
@@ -1275,8 +1276,8 @@ func newCache(cloud *client.CloudAPI, expiration time.Duration, partition, tenan
 		}),
 		volumes: cache.New(expiration, func(ctx context.Context, _ string) ([]*models.V1VolumeResponse, error) {
 			resp, err := cloud.Volume.FindVolumes(volume.NewFindVolumesParams().WithBody(&models.V1VolumeFindRequest{
-				PartitionID: output.StrDeref(partition),
-				TenantID:    output.StrDeref(tenant),
+				PartitionID: pointer.PointerOrNil(partition),
+				TenantID:    pointer.PointerOrNil(tenant),
 			}).WithContext(ctx), nil)
 			if err != nil {
 				return nil, err

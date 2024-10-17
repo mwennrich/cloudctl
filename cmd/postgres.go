@@ -8,7 +8,7 @@ import (
 	"github.com/fi-ts/cloud-go/api/client/database"
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/cmd/helper"
-	"github.com/fi-ts/cloudctl/cmd/output"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -72,7 +72,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresCreate()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresCreateStandbyCmd := &cobra.Command{
 		Use:   "create-standby",
@@ -80,7 +79,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresCreateStandby()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresPromoteToPrimaryCmd := &cobra.Command{
 		Use:   "promote-to-primary",
@@ -88,7 +86,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresPromoteToPrimary(args)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresDemoteToStandbyCmd := &cobra.Command{
 		Use:   "demote-to-standby",
@@ -96,7 +93,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresDemoteToStandby(args)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresRestoreCmd := &cobra.Command{
 		Use:   "restore",
@@ -104,7 +100,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresRestore()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresApplyCmd := &cobra.Command{
 		Use:   "apply",
@@ -112,7 +107,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresApply()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresEditCmd := &cobra.Command{
 		Use:   "edit",
@@ -120,7 +114,13 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresEdit(args)
 		},
-		PreRun: bindPFlags,
+	}
+	postgresUpdateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "update postgres",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.postgresUpdate(args)
+		},
 	}
 	postgresAcceptRestoreCmd := &cobra.Command{
 		Use:   "restore-accepted",
@@ -128,7 +128,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresAcceptRestore(args)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresListCmd := &cobra.Command{
 		Use:     "list",
@@ -137,7 +136,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresFind()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresListBackupsCmd := &cobra.Command{
 		Use:   "list-backups",
@@ -145,7 +143,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresListBackups(args)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresDeleteCmd := &cobra.Command{
 		Use:     "delete <postgres>",
@@ -154,7 +151,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresDelete(args)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresDescribeCmd := &cobra.Command{
 		Use:   "describe <postgres>",
@@ -162,7 +158,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresDescribe(args)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresConnectionStringCmd := &cobra.Command{
 		Use:   "connectionstring <postgres>",
@@ -170,7 +165,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresConnectionString(args)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresVersionsCmd := &cobra.Command{
 		Use:   "version",
@@ -178,7 +172,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresVersions()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresPartitionsCmd := &cobra.Command{
 		Use:   "partition",
@@ -186,7 +179,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresPartitions()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresBackupCmd := &cobra.Command{
 		Use:   "backup-config",
@@ -199,7 +191,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresBackupCreate(false)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresBackupAutoCreateCmd := &cobra.Command{
 		Use:   "auto-create",
@@ -207,7 +198,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresBackupCreate(true)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresBackupUpdateCmd := &cobra.Command{
 		Use:   "update",
@@ -215,7 +205,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresBackupUpdate()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresBackupListCmd := &cobra.Command{
 		Use:     "list",
@@ -224,7 +213,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresBackupList()
 		},
-		PreRun: bindPFlags,
 	}
 	postgresBackupDescribeCmd := &cobra.Command{
 		Use:   "describe",
@@ -232,7 +220,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresBackupDescribe(args)
 		},
-		PreRun: bindPFlags,
 	}
 	postgresBackupDeleteCmd := &cobra.Command{
 		Use:     "delete <backup-config>",
@@ -241,7 +228,6 @@ postgres=#
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.postgresBackupDelete(args)
 		},
-		PreRun: bindPFlags,
 	}
 
 	postgresCmd.AddCommand(postgresBackupCmd)
@@ -253,6 +239,7 @@ postgres=#
 	postgresCmd.AddCommand(postgresRestoreCmd)
 	postgresCmd.AddCommand(postgresApplyCmd)
 	postgresCmd.AddCommand(postgresEditCmd)
+	postgresCmd.AddCommand(postgresUpdateCmd)
 	postgresCmd.AddCommand(postgresAcceptRestoreCmd)
 	postgresCmd.AddCommand(postgresListCmd)
 	postgresCmd.AddCommand(postgresListBackupsCmd)
@@ -274,7 +261,7 @@ postgres=#
 	postgresCreateCmd.Flags().StringP("project", "", "", "project of the database")
 	postgresCreateCmd.Flags().StringP("partition", "", "", "partition where the database should be created")
 	postgresCreateCmd.Flags().IntP("replicas", "", 1, "replicas of the database")
-	postgresCreateCmd.Flags().StringP("version", "", "12", "version of the database") // FIXME add possible values
+	postgresCreateCmd.Flags().StringP("version", "", "", "version of the database")
 	postgresCreateCmd.Flags().StringSliceP("sources", "", []string{"0.0.0.0/0"}, "networks which should be allowed to connect in CIDR notation")
 	postgresCreateCmd.Flags().StringSliceP("labels", "", []string{}, "labels to add to that postgres database")
 	postgresCreateCmd.Flags().StringP("cpu", "", "500m", "cpus for the database")
@@ -283,13 +270,17 @@ postgres=#
 	postgresCreateCmd.Flags().StringP("backup-config", "", "", "backup to use")
 	postgresCreateCmd.Flags().StringSliceP("maintenance", "", []string{"Sun:22:00-23:00"}, "time specification of the automatic maintenance in the form Weekday:HH:MM-HH-MM [optional]")
 	postgresCreateCmd.Flags().BoolP("audit-logs", "", true, "enable audit logs for the database")
-	must(postgresCreateCmd.MarkFlagRequired("description"))
-	must(postgresCreateCmd.MarkFlagRequired("project"))
-	must(postgresCreateCmd.MarkFlagRequired("partition"))
-	must(postgresCreateCmd.MarkFlagRequired("backup-config"))
-	must(postgresCreateCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
-	must(postgresCreateCmd.RegisterFlagCompletionFunc("partition", c.comp.PostgresListPartitionsCompletion))
-	must(postgresCreateCmd.RegisterFlagCompletionFunc("version", c.comp.PostgresListVersionsCompletion))
+	postgresCreateCmd.Flags().StringP("dedicated-load-balancer-ip", "", "", "an existing ip address for a dedicated load balancer [optional]")
+	postgresCreateCmd.Flags().StringP("auto-assign-ip-from", "", "", "a network used for auto-assigning an ip for a dedicated load balancer [optional]")
+	postgresCreateCmd.Flags().IntP("dedicated-load-balancer-port", "", 0, "a port for a dedicated load balancer [optional]")
+	genericcli.Must(postgresCreateCmd.MarkFlagRequired("description"))
+	genericcli.Must(postgresCreateCmd.MarkFlagRequired("project"))
+	genericcli.Must(postgresCreateCmd.MarkFlagRequired("partition"))
+	genericcli.Must(postgresCreateCmd.MarkFlagRequired("backup-config"))
+	genericcli.Must(postgresCreateCmd.MarkFlagRequired("version"))
+	genericcli.Must(postgresCreateCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(postgresCreateCmd.RegisterFlagCompletionFunc("partition", c.comp.PostgresListPartitionsCompletion))
+	genericcli.Must(postgresCreateCmd.RegisterFlagCompletionFunc("version", c.comp.PostgresListVersionsCompletion))
 
 	// CreateStandby
 	postgresCreateStandbyCmd.Flags().StringP("primary-postgres-id", "", "", "id of the primary database")
@@ -299,12 +290,15 @@ postgres=#
 	postgresCreateStandbyCmd.Flags().StringSliceP("labels", "", []string{}, "labels to add to that postgres database")
 	postgresCreateStandbyCmd.Flags().StringP("backup-config", "", "", "backup to use")
 	postgresCreateStandbyCmd.Flags().StringSliceP("maintenance", "", []string{"Sun:22:00-23:00"}, "time specification of the automatic maintenance in the form Weekday:HH:MM-HH-MM [optional]")
-	must(postgresCreateStandbyCmd.MarkFlagRequired("primary-postgres-id"))
-	must(postgresCreateStandbyCmd.MarkFlagRequired("description"))
-	must(postgresCreateStandbyCmd.MarkFlagRequired("partition"))
-	must(postgresCreateStandbyCmd.MarkFlagRequired("backup-config"))
-	must(postgresCreateStandbyCmd.RegisterFlagCompletionFunc("primary-postgres-id", c.comp.PostgresListCompletion))
-	must(postgresCreateStandbyCmd.RegisterFlagCompletionFunc("partition", c.comp.PostgresListPartitionsCompletion))
+	postgresCreateStandbyCmd.Flags().StringP("dedicated-load-balancer-ip", "", "", "an existing ip address for a dedicated load balancer [optional]")
+	postgresCreateStandbyCmd.Flags().StringP("auto-assign-ip-from", "", "", "a network used for auto-assigning an ip for a dedicated load balancer [optional]")
+	postgresCreateStandbyCmd.Flags().IntP("dedicated-load-balancer-port", "", 0, "a port for a dedicated load balancer [optional]")
+	genericcli.Must(postgresCreateStandbyCmd.MarkFlagRequired("primary-postgres-id"))
+	genericcli.Must(postgresCreateStandbyCmd.MarkFlagRequired("description"))
+	genericcli.Must(postgresCreateStandbyCmd.MarkFlagRequired("partition"))
+	genericcli.Must(postgresCreateStandbyCmd.MarkFlagRequired("backup-config"))
+	genericcli.Must(postgresCreateStandbyCmd.RegisterFlagCompletionFunc("primary-postgres-id", c.comp.PostgresListCompletion))
+	genericcli.Must(postgresCreateStandbyCmd.RegisterFlagCompletionFunc("partition", c.comp.PostgresListPartitionsCompletion))
 
 	// PromoteToPrimary
 	postgresPromoteToPrimaryCmd.Flags().BoolP("synchronous", "", false, "make the replication synchronous")
@@ -317,9 +311,21 @@ postgres=#
 	postgresRestoreCmd.Flags().StringP("partition", "", "", "partition where the database should be created. Changing the partition compared to the source database requires administrative privileges")
 	postgresRestoreCmd.Flags().StringSliceP("labels", "", []string{}, "labels to add to that postgres database")
 	postgresRestoreCmd.Flags().StringSliceP("maintenance", "", []string{"Sun:22:00-23:00"}, "time specification of the automatic maintenance in the form Weekday:HH:MM-HH-MM [optional]")
-	must(postgresRestoreCmd.MarkFlagRequired("source-postgres-id"))
-	must(postgresRestoreCmd.RegisterFlagCompletionFunc("source-postgres-id", c.comp.PostgresListCompletion))
-	must(postgresRestoreCmd.RegisterFlagCompletionFunc("partition", c.comp.PostgresListPartitionsCompletion))
+	genericcli.Must(postgresRestoreCmd.MarkFlagRequired("source-postgres-id"))
+	genericcli.Must(postgresRestoreCmd.RegisterFlagCompletionFunc("source-postgres-id", c.comp.PostgresListCompletion))
+	genericcli.Must(postgresRestoreCmd.RegisterFlagCompletionFunc("partition", c.comp.PostgresListPartitionsCompletion))
+
+	// Update
+	postgresUpdateCmd.Flags().IntP("replicas", "", 1, "replicas of the database [optional]")
+	postgresUpdateCmd.Flags().StringSliceP("sources", "", []string{"0.0.0.0/0"}, "networks which should be allowed to connect in CIDR notation [optional]")
+	postgresUpdateCmd.Flags().StringSliceP("labels", "", []string{}, "labels to add to that postgres database [optional]")
+	postgresUpdateCmd.Flags().StringP("cpu", "", "500m", "cpus for the database [optional]")
+	postgresUpdateCmd.Flags().StringP("buffer", "", "64Mi", "shared buffer for the database [optional]")
+	postgresUpdateCmd.Flags().StringP("storage", "", "10Gi", "storage for the database [optional]")
+	postgresUpdateCmd.Flags().BoolP("audit-logs", "", true, "enable audit logs for the database [optional]")
+	postgresUpdateCmd.Flags().StringP("dedicated-load-balancer-ip", "", "", "an existing ip address for a dedicated load balancer [optional]")
+	postgresUpdateCmd.Flags().StringP("auto-assign-ip-from", "", "", "a network used for auto-assigning an ip for a dedicated load balancer [optional]")
+	postgresUpdateCmd.Flags().IntP("dedicated-load-balancer-port", "", 0, "a port for a dedicated load balancer [optional]")
 
 	// List
 	postgresListCmd.Flags().StringP("id", "", "", "postgres id to filter [optional]")
@@ -328,8 +334,8 @@ postgres=#
 	postgresListCmd.Flags().StringP("project", "", "", "project to filter [optional]")
 	postgresListCmd.Flags().StringP("partition", "", "", "partition to filter [optional]")
 
-	must(postgresListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
-	must(postgresListCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+	genericcli.Must(postgresListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(postgresListCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
 
 	postgresApplyCmd.Flags().StringP("file", "f", "", `filename of the create or update request in yaml format, or - for stdin.
 	Example postgres update:
@@ -343,7 +349,7 @@ postgres=#
 	`)
 
 	postgresConnectionStringCmd.Flags().StringP("type", "", "psql", "the type of the connectionstring to create, can be one of psql|jdbc")
-	must(postgresConnectionStringCmd.RegisterFlagCompletionFunc("type", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	genericcli.Must(postgresConnectionStringCmd.RegisterFlagCompletionFunc("type", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"jdbc", "psql"}, cobra.ShellCompDirectiveNoFileComp
 	}))
 
@@ -357,25 +363,25 @@ postgres=#
 	postgresBackupCreateCmd.Flags().StringP("s3-accesskey", "", "", "s3-accesskey")
 	postgresBackupCreateCmd.Flags().StringP("s3-secretkey", "", "", "s3-secretkey")
 	postgresBackupCreateCmd.Flags().StringP("s3-encryptionkey", "", "", "s3 encryption key, enables sse (server side encryption) if given [optional]")
-	must(postgresBackupCreateCmd.MarkFlagRequired("name"))
-	must(postgresBackupCreateCmd.MarkFlagRequired("project"))
-	must(postgresBackupCreateCmd.MarkFlagRequired("s3-endpoint"))
-	must(postgresBackupCreateCmd.MarkFlagRequired("s3-accesskey"))
-	must(postgresBackupCreateCmd.MarkFlagRequired("s3-secretkey"))
+	genericcli.Must(postgresBackupCreateCmd.MarkFlagRequired("name"))
+	genericcli.Must(postgresBackupCreateCmd.MarkFlagRequired("project"))
+	genericcli.Must(postgresBackupCreateCmd.MarkFlagRequired("s3-endpoint"))
+	genericcli.Must(postgresBackupCreateCmd.MarkFlagRequired("s3-accesskey"))
+	genericcli.Must(postgresBackupCreateCmd.MarkFlagRequired("s3-secretkey"))
 
 	postgresBackupAutoCreateCmd.Flags().StringP("name", "", "", "name of the backup config")
 	postgresBackupAutoCreateCmd.Flags().StringP("project", "", "", "project of the backup config")
 	postgresBackupAutoCreateCmd.Flags().StringP("schedule", "", "30 00 * * *", "backup schedule in cron syntax")
 	postgresBackupAutoCreateCmd.Flags().Int32P("retention", "", int32(10), "number of backups per database to retain")
 	postgresBackupAutoCreateCmd.Flags().StringP("partition", "", "", "the postgres partition this backup configuration is mainly used in. This e.g. automatically selects the recommended S3 partition for the (auto-created) S3 bucket.")
-	must(postgresBackupAutoCreateCmd.MarkFlagRequired("name"))
-	must(postgresBackupAutoCreateCmd.MarkFlagRequired("project"))
-	must(postgresBackupAutoCreateCmd.MarkFlagRequired("partition"))
+	genericcli.Must(postgresBackupAutoCreateCmd.MarkFlagRequired("name"))
+	genericcli.Must(postgresBackupAutoCreateCmd.MarkFlagRequired("project"))
+	genericcli.Must(postgresBackupAutoCreateCmd.MarkFlagRequired("partition"))
 
 	postgresBackupUpdateCmd.Flags().StringP("id", "", "", "id of the database backup")
 	postgresBackupUpdateCmd.Flags().StringP("schedule", "", "", "backup schedule in cron syntax [optional]")
 	postgresBackupUpdateCmd.Flags().Int32P("retention", "", int32(0), "number of backups per database to retain [optional]")
-	must(postgresBackupUpdateCmd.MarkFlagRequired("id"))
+	genericcli.Must(postgresBackupUpdateCmd.MarkFlagRequired("id"))
 
 	return postgresCmd
 }
@@ -394,6 +400,19 @@ func (c *config) postgresCreate() error {
 	storage := viper.GetString("storage")
 	maintenance := viper.GetStringSlice("maintenance")
 	auditLogs := viper.GetBool("audit-logs")
+	lbIP := viper.GetString("dedicated-load-balancer-ip")
+	lbPort := viper.GetInt32("dedicated-load-balancer-port")
+	lbNet := viper.GetString("auto-assign-ip-from")
+
+	var dedicatedloadbalancerip *string
+	if lbIP != "" {
+		dedicatedloadbalancerip = &lbIP
+	}
+
+	var dedicatedloadbalancerport *int32
+	if lbPort != 0 {
+		dedicatedloadbalancerport = &lbPort
+	}
 
 	labelMap, err := helper.LabelsToMap(labels)
 	if err != nil {
@@ -414,10 +433,16 @@ func (c *config) postgresCreate() error {
 		AccessList: &models.V1AccessList{
 			SourceRanges: sources,
 		},
-		Maintenance: maintenance,
-		Labels:      labelMap,
-		AuditLogs:   auditLogs,
+		Maintenance:               maintenance,
+		Labels:                    labelMap,
+		AuditLogs:                 auditLogs,
+		Dedicatedloadbalancerip:   dedicatedloadbalancerip,
+		Dedicatedloadbalancerport: dedicatedloadbalancerport,
 	}
+	if lbNet != "" {
+		pcr.Autoassigndedicatedlbipfrom = lbNet
+	}
+
 	request := database.NewCreatePostgresParams()
 	request.SetBody(pcr)
 
@@ -426,7 +451,7 @@ func (c *config) postgresCreate() error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 
 func (c *config) postgresCreateStandby() error {
@@ -436,18 +461,31 @@ func (c *config) postgresCreateStandby() error {
 	labels := viper.GetStringSlice("labels")
 	backupConfig := viper.GetString("backup-config")
 	maintenance := viper.GetStringSlice("maintenance")
+	var dedicatedloadbalancerip *string
+	if lbIP := viper.GetString("dedicated-load-balancer-ip"); lbIP != "" {
+		dedicatedloadbalancerip = &lbIP
+	}
+	var dedicatedloadbalancerport *int32
+	if lbPort := viper.GetInt32("dedicated-load-balancer-port"); lbPort != 0 {
+		dedicatedloadbalancerport = &lbPort
+	}
 
 	labelMap, err := helper.LabelsToMap(labels)
 	if err != nil {
 		return err
 	}
 	pcsr := &models.V1PostgresCreateStandbyRequest{
-		PrimaryID:   &primaryPostgresID,
-		Description: desc,
-		PartitionID: partition,
-		Backup:      backupConfig,
-		Maintenance: maintenance,
-		Labels:      labelMap,
+		PrimaryID:                 &primaryPostgresID,
+		Description:               desc,
+		PartitionID:               partition,
+		Backup:                    backupConfig,
+		Maintenance:               maintenance,
+		Labels:                    labelMap,
+		Dedicatedloadbalancerip:   dedicatedloadbalancerip,
+		Dedicatedloadbalancerport: dedicatedloadbalancerport,
+	}
+	if lbNet := viper.GetString("auto-assign-ip-from"); lbNet != "" {
+		pcsr.Autoassigndedicatedlbipfrom = lbNet
 	}
 	request := database.NewCreatePostgresStandbyParams()
 	request.SetBody(pcsr)
@@ -457,7 +495,7 @@ func (c *config) postgresCreateStandby() error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 
 func (c *config) postgresPromoteToPrimary(args []string) error {
@@ -501,7 +539,7 @@ func (c *config) postgresPromoteToPrimary(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(uresp.Payload)
+	return c.listPrinter.Print(uresp.Payload)
 }
 
 func (c *config) postgresDemoteToStandby(args []string) error {
@@ -541,7 +579,7 @@ func (c *config) postgresDemoteToStandby(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(uresp.Payload)
+	return c.listPrinter.Print(uresp.Payload)
 }
 
 func (c *config) postgresRestore() error {
@@ -574,7 +612,7 @@ func (c *config) postgresRestore() error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 
 func (c *config) postgresApply() error {
@@ -646,7 +684,7 @@ func (c *config) postgresApply() error {
 		response = append(response, createdPG.Payload)
 		continue
 	}
-	return output.New().Print(response)
+	return c.listPrinter.Print(response)
 }
 
 func (c *config) postgresEdit(args []string) error {
@@ -681,9 +719,97 @@ func (c *config) postgresEdit(args []string) error {
 		if err != nil {
 			return err
 		}
-		return output.New().Print(uresp.Payload)
+		return c.listPrinter.Print(uresp.Payload)
 	}
 	return helper.Edit(id, getFunc, updateFunc)
+}
+
+func (c *config) postgresUpdate(args []string) error {
+	replicas := viper.GetInt32("replicas")
+	sources := viper.GetStringSlice("sources")
+	labels := viper.GetStringSlice("labels")
+	cpu := viper.GetString("cpu")
+	buffer := viper.GetString("buffer")
+	storage := viper.GetString("storage")
+	auditLogs := viper.GetBool("audit-logs")
+	lbIP := viper.GetString("dedicated-load-balancer-ip")
+	lbPort := viper.GetInt32("dedicated-load-balancer-port")
+	lbNet := viper.GetString("auto-assign-ip-from")
+
+	id, err := c.postgresID("update", args)
+	if err != nil {
+		return err
+	}
+
+	params := database.NewGetPostgresParams().WithID(id)
+	resp, err := c.cloud.Database.GetPostgres(params, nil)
+	if err != nil {
+		return err
+	}
+	current := resp.Payload
+
+	// copy the (minimum) current config
+	pur := &models.V1PostgresUpdateRequest{
+		ProjectID:      current.ProjectID,
+		ID:             current.ID,
+		Connection:     current.Connection,
+		AuditLogs:      current.AuditLogs,
+		PostgresParams: current.PostgresParams,
+	}
+
+	if viper.IsSet("replicas") {
+		pur.NumberOfInstances = replicas
+	}
+
+	if viper.IsSet("sources") {
+		pur.AccessList = &models.V1AccessList{
+			SourceRanges: sources,
+		}
+	}
+
+	if viper.IsSet("labels") {
+		labelMap, err := helper.LabelsToMap(labels)
+		if err != nil {
+			return err
+		}
+		pur.Labels = labelMap
+	}
+
+	pur.Size = &models.V1PostgresSize{}
+	if viper.IsSet("cpu") {
+		pur.Size.CPU = cpu
+	}
+	if viper.IsSet("buffer") {
+		pur.Size.SharedBuffer = buffer
+	}
+	if viper.IsSet("storage") {
+		pur.Size.StorageSize = storage
+	}
+
+	if viper.IsSet("audit-logs") {
+		pur.AuditLogs = auditLogs
+	}
+
+	if viper.IsSet("dedicated-load-balancer-ip") {
+		pur.Dedicatedloadbalancerip = &lbIP
+	}
+
+	if viper.IsSet("dedicated-load-balancer-port") {
+		pur.Dedicatedloadbalancerport = &lbPort
+	}
+
+	if viper.IsSet("auto-assign-ip-from") {
+		pur.Autoassigndedicatedlbipfrom = lbNet
+	}
+
+	// send the update request
+	req := database.NewUpdatePostgresParams()
+	req.Body = pur
+	uresp, err := c.cloud.Database.UpdatePostgres(req, nil)
+	if err != nil {
+		return err
+	}
+	return c.listPrinter.Print(uresp.Payload)
 }
 
 func (c *config) postgresAcceptRestore(args []string) error {
@@ -692,7 +818,7 @@ func (c *config) postgresAcceptRestore(args []string) error {
 		return err
 	}
 
-	must(output.New().Print(pg))
+	genericcli.Must(c.listPrinter.Print(pg))
 
 	fmt.Println("Has the restore finished successfully?")
 	err = helper.Prompt("(type yes to proceed):", "yes")
@@ -706,7 +832,7 @@ func (c *config) postgresAcceptRestore(args []string) error {
 		return err
 	}
 
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func readPostgresUpdateRequests(filename string) ([]models.V1PostgresUpdateRequest, error) {
@@ -755,13 +881,13 @@ func (c *config) postgresFind() error {
 		if err != nil {
 			return err
 		}
-		return output.New().Print(resp.Payload)
+		return c.listPrinter.Print(resp.Payload)
 	}
 	resp, err := c.cloud.Database.ListPostgres(nil, nil)
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) postgresDelete(args []string) error {
@@ -771,7 +897,7 @@ func (c *config) postgresDelete(args []string) error {
 	}
 
 	if !viper.GetBool("yes-i-really-mean-it") {
-		must(output.New().Print(pg))
+		genericcli.Must(c.listPrinter.Print(pg))
 
 		idParts := strings.Split(*pg.ID, "-")
 		firstPartOfPostgresID := idParts[0]
@@ -793,7 +919,7 @@ func (c *config) postgresDelete(args []string) error {
 		return err
 	}
 
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) postgresDescribe(args []string) error {
@@ -802,7 +928,7 @@ func (c *config) postgresDescribe(args []string) error {
 		return err
 	}
 
-	return output.New().Print(postgres)
+	return c.listPrinter.Print(postgres)
 }
 
 func (c *config) postgresListBackups(args []string) error {
@@ -816,7 +942,7 @@ func (c *config) postgresListBackups(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 
 func (c *config) postgresConnectionString(args []string) error {
@@ -865,7 +991,7 @@ func (c *config) postgresBackupCreate(autocreate bool) error {
 	name := viper.GetString("name")
 	project := viper.GetString("project")
 	schedule := viper.GetString("schedule")
-	retention := viper.GetInt32("retention")
+	retention := viper.GetInt64("retention")
 	partition := viper.GetString("partition")
 	s3Endpoint := viper.GetString("s3-endpoint")
 	s3Region := viper.GetString("s3-region")
@@ -905,7 +1031,7 @@ func (c *config) postgresBackupCreate(autocreate bool) error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 func (c *config) postgresBackupUpdate() error {
 	id := viper.GetString("id")
@@ -940,7 +1066,7 @@ func (c *config) postgresBackupUpdate() error {
 		return err
 	}
 
-	return output.New().Print(response.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 
 func (c *config) postgresBackupList() error {
@@ -950,7 +1076,7 @@ func (c *config) postgresBackupList() error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 func (c *config) postgresBackupDescribe(args []string) error {
 
@@ -967,7 +1093,7 @@ func (c *config) postgresBackupDescribe(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 func (c *config) postgresBackupDelete(args []string) error {
 	if len(args) < 1 {
@@ -1005,7 +1131,7 @@ func (c *config) postgresBackupDelete(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 
 }
 
@@ -1016,7 +1142,7 @@ func (c *config) postgresVersions() error {
 		return err
 	}
 
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 func (c *config) postgresPartitions() error {
 	params := database.NewGetPostgresPartitionsParams()
@@ -1025,7 +1151,7 @@ func (c *config) postgresPartitions() error {
 		return err
 	}
 
-	return output.New().Print(resp.Payload)
+	return c.listPrinter.Print(resp.Payload)
 }
 func (c *config) getPostgresFromArgs(args []string) (*models.V1PostgresResponse, error) {
 	if len(args) < 1 {
