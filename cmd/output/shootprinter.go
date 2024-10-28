@@ -166,10 +166,10 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 	name := *shoot.Name
 	if shoot.NetworkAccessType != nil {
 		if *shoot.NetworkAccessType == models.V1ClusterCreateRequestNetworkAccessTypeForbidden {
-			name = color.RedString(name)
+			name = color.RedString(name)+"🔑"
 		}
 		if *shoot.NetworkAccessType == models.V1ClusterCreateRequestNetworkAccessTypeRestricted {
-			name = color.YellowString(name)
+			name = color.YellowString(name)+"🗝️"
 		}
 	}
 
