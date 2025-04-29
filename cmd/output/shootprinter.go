@@ -154,6 +154,10 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 		shootStats.apiServer += "🔒"
 	}
 
+	if shoot.Audit != nil && shoot.Audit.Disabled != nil && ! *shoot.Audit.Disabled {
+		shootStats.apiServer += "🔍"
+	}
+
 	if shoot.ClusterFeatures != nil {
 		if ok, err := strconv.ParseBool(pointer.SafeDeref(shoot.ClusterFeatures.HighAvailability)); err == nil && ok {
 			shootStats.apiServer += "🤹"
