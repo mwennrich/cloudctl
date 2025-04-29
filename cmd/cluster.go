@@ -231,7 +231,7 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().StringSlice("labels", []string{}, "labels of the cluster")
 	clusterCreateCmd.Flags().StringSlice("external-networks", []string{}, "external networks of the cluster")
 	clusterCreateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <network>:<ip>; e.g.: --egress internet:1.2.3.4,extnet:123.1.1.1 --egress internet:1.2.3.5 [optional]")
-	clusterCreateCmd.Flags().String("default-pod-security-standard", "", "sets default pod security standard for clusters >= v1.23.x, defaults to restricted on clusters >= v1.25 (valid values: empty string, privileged, baseline, restricted)")
+	clusterCreateCmd.Flags().String("default-pod-security-standard", "privileged", "sets default pod security standard for clusters >= v1.23.x, defaults to restricted on clusters >= v1.25 (valid values: empty string, privileged, baseline, restricted)")
 	clusterCreateCmd.Flags().Duration("healthtimeout", 0, "period (e.g. \"24h\") after which an unhealthy node is declared failed and will be replaced. [optional]")
 	clusterCreateCmd.Flags().Duration("draintimeout", 0, "period (e.g. \"3h\") after which a draining node will be forcefully deleted. [optional]")
 	clusterCreateCmd.Flags().Bool("encrypted-storage-classes", false, "enables the deployment of encrypted duros storage classes into the cluster. please refer to the user manual to properly use volume encryption. [optional]")
