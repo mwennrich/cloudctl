@@ -1854,7 +1854,9 @@ func (c *config) clusterMachinePackages(args []string) error {
 			if err != nil {
 				return fmt.Errorf("image:%s does not have a package list", id)
 			}
-			defer res.Body.Close()
+			defer func() {
+				_ = res.Body.Close()
+			}()
 			if res.StatusCode >= 400 {
 				return fmt.Errorf("image:%s does not have a package list", id)
 			}
@@ -1863,7 +1865,9 @@ func (c *config) clusterMachinePackages(args []string) error {
 			if err != nil {
 				return err
 			}
-			defer getResp.Body.Close()
+			defer func() {
+				_ = getResp.Body.Close()
+			}()
 			content, err := io.ReadAll(getResp.Body)
 			if err != nil {
 				return err
