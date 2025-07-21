@@ -15,6 +15,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	ZALANDO_TIMESTAMP_FORMAT = "2006-01-02T15:04:05-07:00"
+)
+
 func newPostgresCmd(c *config) *cobra.Command {
 	postgresCmd := &cobra.Command{
 		Use:   "postgres",
@@ -310,7 +314,7 @@ postgres=#
 
 	// Restore
 	postgresRestoreCmd.Flags().StringP("source-postgres-id", "", "", "if of the primary database")
-	postgresRestoreCmd.Flags().StringP("timestamp", "", time.Now().Format(time.RFC3339), "point-in-time to restore to")
+	postgresRestoreCmd.Flags().StringP("timestamp", "", time.Now().Format(ZALANDO_TIMESTAMP_FORMAT), "point-in-time to restore to")
 	postgresRestoreCmd.Flags().StringP("version", "", "", "postgres version of the database")
 	postgresRestoreCmd.Flags().StringP("description", "", "", "description of the database")
 	postgresRestoreCmd.Flags().StringP("partition", "", "", "partition where the database should be created. Changing the partition compared to the source database requires administrative privileges")
@@ -334,6 +338,7 @@ postgres=#
 	postgresUpdateCmd.Flags().StringP("auto-assign-ip-from", "", "", "a network used for auto-assigning an ip for a dedicated load balancer [optional]")
 	postgresUpdateCmd.Flags().IntP("dedicated-load-balancer-port", "", 0, "a port for a dedicated load balancer [optional]")
 	postgresUpdateCmd.Flags().BoolP("disable-loadbalancers", "", false, "disable connections with the public loadbalancer IP [optional]")
+	postgresUpdateCmd.Flags().StringP("backup-config", "", "", "backup config to use. REQUIRES A POD RESTART TO TAKE EFFECT [optional]")
 
 	// List
 	postgresListCmd.Flags().StringP("id", "", "", "postgres id to filter [optional]")
@@ -624,9 +629,9 @@ func (c *config) postgresRestore() error {
 		return err
 	}
 
-	_, err = time.Parse("2006-01-02T15:04:05-07:00", timestamp)
+	_, err = time.Parse(ZALANDO_TIMESTAMP_FORMAT, timestamp)
 	if err != nil {
-		return fmt.Errorf("restore.timestamp cannot be parsed:%s, please provide a timestamp similar to e.g. 2021-12-07T15:28:00+01:00", timestamp)
+		return fmt.Errorf("restore.timestamp cannot be parsed:%s, please provide a timestamp similar to e.g. %s", timestamp, ZALANDO_TIMESTAMP_FORMAT)
 	}
 
 	pcsr := &models.V1PostgresRestoreRequest{
@@ -775,6 +780,7 @@ func (c *config) postgresUpdate(args []string) error {
 	if viper.GetString("disable-loadbalancers") != "" {
 		disableLB = pointer.Pointer(viper.GetBool("disable-loadbalancers"))
 	}
+	backupConfig := viper.GetString("backup-config")
 
 	id, err := c.postgresID("update", args)
 	if err != nil {
@@ -841,6 +847,11 @@ func (c *config) postgresUpdate(args []string) error {
 
 	if viper.IsSet("auto-assign-ip-from") {
 		pur.Autoassigndedicatedlbipfrom = lbNet
+	}
+
+	if viper.IsSet("backup-config") {
+		pur.Backup = backupConfig
+		fmt.Print("\nHint: The updated backup config will not be used until the pods are restartet. The pods will not restart automatically.\n\n")
 	}
 
 	// send the update request
