@@ -156,7 +156,7 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 
 	if shoot.Audit != nil && shoot.Audit.Disabled != nil && !*shoot.Audit.Disabled && shoot.Audit.Backends != nil &&
 		((shoot.Audit.Backends.ClusterForwarding != nil && shoot.Audit.Backends.ClusterForwarding.Enabled != nil && *shoot.Audit.Backends.ClusterForwarding.Enabled) ||
-		(shoot.Audit.Backends.Splunk != nil && shoot.Audit.Backends.Splunk.Enabled != nil && *shoot.Audit.Backends.Splunk.Enabled)) {
+			(shoot.Audit.Backends.Splunk != nil && shoot.Audit.Backends.Splunk.Enabled != nil && *shoot.Audit.Backends.Splunk.Enabled)) {
 		shootStats.apiServer += "🔍"
 	}
 
@@ -172,11 +172,15 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 	name := *shoot.Name
 	if shoot.NetworkAccessType != nil {
 		if *shoot.NetworkAccessType == models.V1ClusterCreateRequestNetworkAccessTypeForbidden {
-			name = color.RedString(name) + "🔑"
+			name = color.RedString(name) + "🔐"
 		}
 		if *shoot.NetworkAccessType == models.V1ClusterCreateRequestNetworkAccessTypeRestricted {
-			name = color.YellowString(name) + "🗝️"
+			name = color.YellowString(name) + "🔑"
 		}
+	}
+
+	if shoot.XDRConfig != nil && shoot.XDRConfig.Disabled != nil && !*shoot.XDRConfig.Disabled {
+		shootStats.nodes += "💩"
 	}
 
 	maintainEmoji := ""
