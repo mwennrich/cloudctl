@@ -72,7 +72,6 @@ func (s ShootLastErrorsTablePrinter) Print(data []*models.V1beta1LastError) {
 	s.wideHeader = []string{"Time", "Task", "Description"}
 	s.shortHeader = []string{"Time", "Task", "Description"}
 	for _, e := range data {
-		e := e
 
 		wide := []string{
 			pointer.SafeDeref(&e.LastUpdateTime),
@@ -167,6 +166,10 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 		if ok, err := strconv.ParseBool(pointer.SafeDeref(shoot.ClusterFeatures.CalicoEbpfDataplane)); err == nil && ok {
 			shootStats.system += "🐝"
 		}
+		if pointer.SafeDeref(shoot.Cni) == "cilium" {
+			shootStats.system += "😫"
+		}
+
 	}
 
 	name := *shoot.Name
