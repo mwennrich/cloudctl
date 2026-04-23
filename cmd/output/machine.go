@@ -25,6 +25,7 @@ const (
 	circle   = "●"
 	VPN      = "🛡"
 	Lock     = "🔒"
+	Bark     = "🚧"
 )
 
 // Print a list of Machines in a table
@@ -106,6 +107,10 @@ func (m MachineTablePrinter) Print(data []*models.ModelsV1MachineResponse) {
 
 		if machine.Allocation != nil && machine.Allocation.Vpn != nil {
 			statusEmoji = VPN
+		}
+
+		if machine.State != nil && machine.State.Value != nil && *machine.State.Value == metalmodels.V1MachineStateValueRESERVED {
+			statusEmoji = Bark
 		}
 
 		row := []string{machineID, statusEmoji, lastEvent, when, started, age, hostname, ips, sizeID, image, partitionID, machine.Rackid}
