@@ -163,13 +163,16 @@ func newPrinter(format, order, tpl string, noHeaders bool, writer io.Writer) (Pr
 	case "json":
 		printer = printers.NewJSONPrinter().WithOut(writer)
 	case "table", "wide", "markdown":
-		printer = newTablePrinter(format, order, noHeaders, nil, writer)
+		printer = newTablePrinter(format, order, noHeaders, writer)
 	case "template":
 		tmpl, err := template.New("t").Funcs(sprig.TxtFuncMap()).Parse(tpl)
 		if err != nil {
 			return nil, fmt.Errorf("template invalid:%w", err)
 		}
-		printer = newTablePrinter(format, order, true, tmpl, writer)
+		printer = func() *tablePrinter {
+			var _ *template.Template = tmpl
+			return newTablePrinter(format, order, true, writer)
+		}()
 	default:
 		return nil, fmt.Errorf("unknown format:%s", format)
 	}
@@ -186,7 +189,7 @@ func newPrinter(format, order, tpl string, noHeaders bool, writer io.Writer) (Pr
 	return printer, nil
 }
 
-func newTablePrinter(format, order string, noHeaders bool, template *template.Template, writer io.Writer) *tablePrinter {
+func newTablePrinter(format, order string, noHeaders bool, writer io.Writer) *tablePrinter {
 	tp := tablePrinter{
 		format:    format,
 		wide:      false,

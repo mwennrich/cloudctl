@@ -103,7 +103,7 @@ func (s ShootLastOperationTablePrinter) Print(data *models.V1beta1LastOperation)
 
 // Print a Shoot as table
 func (s ShootTablePrinter) Print(data []*models.V1ClusterResponse) {
-	s.wideHeader = []string{"UID", "Name", "Version", "Partition", "Seed", "Domain", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "Purpose", "Audit", "Firewall", "Firewall Controller", "Log accepted conns", "Egress IPs", "Gardener"}
+	s.wideHeader = []string{"UID", "Name", "Version", "Partition", "Seed", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "Purpose", "Audit", "Firewall", "Firewall Controller", "Log accepted conns", "Egress IPs", "Gardener"}
 	s.shortHeader = []string{"UID", "Tenant", "Project", "Name", "Version", "Partition", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "Purpose"}
 
 	if s.order == "" {
@@ -222,15 +222,6 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 	if shoot.CreationTimestamp != nil {
 		age = helper.HumanizeDuration(time.Since(time.Time(*shoot.CreationTimestamp)))
 	}
-	lastReconciliation := ""
-	if shoot.Status != nil && shoot.Status.LastOperation != nil && shoot.Status.LastOperation.LastUpdateTime != nil {
-		lastUpdate, err := time.Parse(time.RFC3339, *shoot.Status.LastOperation.LastUpdateTime)
-		if err != nil {
-			lastReconciliation = "unknown"
-		} else {
-			lastReconciliation = helper.HumanizeDuration(time.Since(lastUpdate))
-		}
-	}
 
 	gardener := ""
 	if shoot.Status != nil && shoot.Status.Gardener != nil && shoot.Status.Gardener.Version != nil {
@@ -339,7 +330,6 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 		shootStats.apiServer, shootStats.controlPlane, shootStats.nodes, shootStats.system,
 		size,
 		age,
-		lastReconciliation,
 		purpose,
 		audit,
 		firewallImage,
