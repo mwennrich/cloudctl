@@ -194,14 +194,6 @@ func newClusterCmd(c *config) *cobra.Command {
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
 	}
-	clusterMachineReinstallCmd := &cobra.Command{
-		Use:   "reinstall <clusterid>",
-		Short: "reinstall OS image onto a machine/firewall of the cluster",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.clusterMachineReinstall(args)
-		},
-		ValidArgsFunction: c.comp.ClusterListCompletion,
-	}
 	clusterMachinePackagesCmd := &cobra.Command{
 		Use:   "packages <clusterid>",
 		Short: "show packages of the os image which is installed on this machine",
@@ -240,6 +232,8 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().String("firewallimage", "", "machine image to use for the firewall. [optional]")
 	clusterCreateCmd.Flags().String("firewallcontroller", "", "version of the firewall-controller to use. [optional]")
 	clusterCreateCmd.Flags().BoolP("logacceptedconns", "", false, "also log accepted connections on the cluster firewall [optional]")
+	clusterCreateCmd.Flags().Duration("firewall-health-timeout", 0, "period (e.g. \"20m\") after which a firewall that hasn't achieved ready status is considered dead. Set to 0 to disable. [optional]")
+	clusterCreateCmd.Flags().Duration("firewall-create-timeout", 0, "period (e.g. \"20m\") after which a firewall that hasn't been created is considered dead. Set to 0 to disable. [optional]")
 	clusterCreateCmd.Flags().Int32("minsize", 1, "minimal workers of the cluster.")
 	clusterCreateCmd.Flags().Int32("maxsize", 1, "maximal workers of the cluster.")
 	clusterCreateCmd.Flags().String("maxsurge", "1", "max number (e.g. 1) or percentage (e.g. 10%) of workers created during a update of the cluster.")
@@ -269,6 +263,7 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().String("network-isolation", "", "defines restrictions to external network communication for the cluster, can be one of baseline|restricted|isolated. baseline sets no special restrictions to external networks, restricted by default only allows external traffic to explicitly allowed destinations, forbidden disallows communication with external networks except for a limited set of networks. Please consult the documentation for detailed descriptions of the individual modes as these cannot be altered anymore after creation. [optional]")
 	clusterCreateCmd.Flags().Bool("high-availability-control-plane", false, "enables a high availability control plane for the cluster, cannot be disabled again")
 	clusterCreateCmd.Flags().Bool("service-account-extend-token-expiration", false, "extends the token expiration time for projected service accounts tokens")
+	clusterCreateCmd.Flags().Duration("service-account-max-token-expiration", 0, "sets the max token expiration duration for projected service account tokens")
 	clusterCreateCmd.Flags().Int64("kubelet-pod-pid-limit", 0, "controls the maximum number of process IDs per pod allowed by the kubelet")
 
 	genericcli.Must(clusterCreateCmd.MarkFlagRequired("name"))
@@ -334,6 +329,8 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().String("firewallimage", "", "machine image to use for the firewall.")
 	clusterUpdateCmd.Flags().String("firewallcontroller", "", "version of the firewall-controller to use.")
 	clusterUpdateCmd.Flags().BoolP("logacceptedconns", "", false, "enables logging of accepted connections on the cluster firewall")
+	clusterUpdateCmd.Flags().Duration("firewall-health-timeout", 0, "period (e.g. \"20m\") after which a firewall that hasn't achieved ready status is considered dead. Set to 0 to disable.")
+	clusterUpdateCmd.Flags().Duration("firewall-create-timeout", 0, "period (e.g. \"20m\") after which a firewall that hasn't been created is considered dead. Set to 0 to disable.")
 	clusterUpdateCmd.Flags().String("machinetype", "", "machine type to use for the nodes.")
 	clusterUpdateCmd.Flags().String("machineimage", "", "machine image to use for the nodes, must be in the form of <name>-<version> ")
 	clusterUpdateCmd.Flags().StringSlice("addlabels", []string{}, "labels to add to the cluster")
@@ -364,6 +361,7 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().Bool("enable-kube-apiserver-acl", false, "restricts access from outside to the kube-apiserver to the source ip addresses set by --kube-apiserver-acl-* [optional].")
 	clusterUpdateCmd.Flags().Bool("high-availability-control-plane", false, "enables a high availability control plane for the cluster, cannot be disabled again")
 	clusterUpdateCmd.Flags().Bool("service-account-extend-token-expiration", false, "extends the token expiration time for projected service accounts tokens")
+	clusterUpdateCmd.Flags().Duration("service-account-max-token-expiration", 0, "sets the max token expiration duration for projected service account tokens. (set to 0 to use kubernetes default)")
 	clusterUpdateCmd.Flags().Int64("kubelet-pod-pid-limit", 0, "controls the maximum number of process IDs per pod allowed by the kubelet")
 	clusterUpdateCmd.Flags().Bool("enable-calico-ebpf", false, "enables calico cni to use eBPF data plane and DSR configuration, for increased performance and preserving source IP addresses. [optional]")
 
@@ -411,11 +409,6 @@ func newClusterCmd(c *config) *cobra.Command {
 	genericcli.Must(clusterMachineCycleCmd.MarkFlagRequired("machineid"))
 	genericcli.Must(clusterMachineCycleCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
 
-	clusterMachineReinstallCmd.Flags().String("machineid", "", "machine to reinstall.")
-	clusterMachineReinstallCmd.Flags().String("machineimage", "", "image to reinstall (optional).")
-	genericcli.Must(clusterMachineReinstallCmd.MarkFlagRequired("machineid"))
-	genericcli.Must(clusterMachineReinstallCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
-
 	clusterMachinePackagesCmd.Flags().String("machineid", "", "machine to connect to.")
 	genericcli.Must(clusterMachinePackagesCmd.MarkFlagRequired("machineid"))
 	genericcli.Must(clusterMachinePackagesCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
@@ -425,7 +418,6 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterMachineCmd.AddCommand(clusterMachineConsoleCmd)
 	clusterMachineCmd.AddCommand(clusterMachineResetCmd)
 	clusterMachineCmd.AddCommand(clusterMachineCycleCmd)
-	clusterMachineCmd.AddCommand(clusterMachineReinstallCmd)
 	clusterMachineCmd.AddCommand(clusterMachinePackagesCmd)
 
 	clusterReconcileCmd.Flags().String("operation", models.V1ClusterReconcileRequestOperationReconcile, fmt.Sprintf("Executes a cluster \"reconcile\" operation, can be one of %s.", strings.Join(completion.ClusterReconcileOperations, "|")))
@@ -482,6 +474,7 @@ func (c *config) clusterCreate() error {
 	disableForwardToUpstreamDNS := viper.GetBool("disable-forwarding-to-upstream-dns")
 	highAvailability := strconv.FormatBool(viper.GetBool("high-availability-control-plane"))
 	serviceAccountExtendTokenExpiration := viper.GetBool("service-account-extend-token-expiration")
+	serviceAccountMaxTokenExpiration := viper.GetDuration("service-account-max-token-expiration")
 	podpidLimit := viper.GetInt64("kubelet-pod-pid-limit")
 	calicoEbpf := strconv.FormatBool(viper.GetBool("enable-calico-ebpf"))
 
@@ -501,6 +494,8 @@ func (c *config) clusterCreate() error {
 
 	healthtimeout := viper.GetDuration("healthtimeout")
 	draintimeout := viper.GetDuration("draintimeout")
+	firewallHealthTimeout := viper.GetDuration("firewall-health-timeout")
+	firewallCreateTimeout := viper.GetDuration("firewall-create-timeout")
 
 	var defaultPodSecurityStandard *string
 	if viper.IsSet("default-pod-security-standard") {
@@ -746,21 +741,15 @@ WARNING: You are going to create a cluster that has no default internet access w
 	}
 
 	if viper.IsSet("high-availability-control-plane") {
-		if ha, _ := strconv.ParseBool(highAvailability); ha {
-			if err := genericcli.PromptCustom(&genericcli.PromptConfig{
-				Message:     "You cannot use the high availability control plane feature gate in combination with the cluster forwarding backend of the audit extension. Please be aware that you cannot revert this feature gate after it was enabled.",
-				ShowAnswers: true,
-				Out:         c.out,
-			}); err != nil {
-				return err
-			}
-		}
-
 		scr.ClusterFeatures.HighAvailability = &highAvailability
 	}
 
 	if viper.IsSet("service-account-extend-token-expiration") {
 		scr.Kubernetes.ServiceAccountExtendTokenExpiration = &serviceAccountExtendTokenExpiration
+	}
+
+	if viper.IsSet("service-account-max-token-expiration") {
+		scr.Kubernetes.ServiceAccountMaxTokenExpiration = new(int64(serviceAccountMaxTokenExpiration))
 	}
 
 	if viper.IsSet("kubelet-pod-pid-limit") {
@@ -783,6 +772,16 @@ WARNING: You are going to create a cluster that has no default internet access w
 		scr.Workers[0].DrainTimeout = int64(draintimeout)
 	}
 
+	if viper.IsSet("firewall-health-timeout") {
+		fwht := int64(firewallHealthTimeout)
+		scr.FirewallHealthTimeout = &fwht
+	}
+
+	if viper.IsSet("firewall-create-timeout") {
+		fwct := int64(firewallCreateTimeout)
+		scr.FirewallCreateTimeout = &fwct
+	}
+
 	request := cluster.NewCreateClusterParams()
 	request.SetBody(scr)
 	shoot, err := c.cloud.Cluster.CreateCluster(request, nil)
@@ -801,10 +800,8 @@ func (c *config) clusterList() error {
 	project := viper.GetString("project")
 	purpose := viper.GetString("purpose")
 	labels := viper.GetStringSlice("labels")
-	var cfr *models.V1ClusterFindRequest
+	cfr := &models.V1ClusterFindRequest{}
 	if id != "" || name != "" || tenant != "" || partition != "" || seed != "" || project != "" || purpose != "" || len(labels) > 0 {
-		cfr = &models.V1ClusterFindRequest{}
-
 		if id != "" {
 			cfr.ID = &id
 		}
@@ -838,22 +835,13 @@ func (c *config) clusterList() error {
 			cfr.Labels = labelMap
 		}
 	}
-	if cfr != nil {
-		fcp := cluster.NewFindClustersParams()
-		fcp.SetBody(cfr)
-		response, err := c.cloud.Cluster.FindClusters(fcp, nil)
-		if err != nil {
-			return err
-		}
-		return c.listPrinter.Print(response.Payload)
-	}
-
-	request := cluster.NewListClustersParams()
-	shoots, err := c.cloud.Cluster.ListClusters(request, nil)
+	fcp := cluster.NewFindClustersParams()
+	fcp.SetBody(cfr)
+	response, err := c.cloud.Cluster.FindClusters(fcp, nil)
 	if err != nil {
 		return err
 	}
-	return c.listPrinter.Print(shoots.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 
 func (c *config) clusterKubeconfig(args []string) error {
@@ -1009,6 +997,7 @@ func (c *config) updateCluster(args []string) error {
 	encryptedStorageClasses := strconv.FormatBool(viper.GetBool("encrypted-storage-classes"))
 	highAvailability := strconv.FormatBool(viper.GetBool("high-availability-control-plane"))
 	serviceAccountExtendTokenExpiration := viper.GetBool("service-account-extend-token-expiration")
+	serviceAccountMaxTokenExpiration := viper.GetDuration("service-account-max-token-expiration")
 	calicoEbpf := strconv.FormatBool(viper.GetBool("enable-calico-ebpf"))
 
 	podpidLimit := viper.GetInt64("kubelet-pod-pid-limit")
@@ -1045,6 +1034,8 @@ func (c *config) updateCluster(args []string) error {
 
 	healthtimeout := viper.GetDuration("healthtimeout")
 	draintimeout := viper.GetDuration("draintimeout")
+	firewallHealthTimeout := viper.GetDuration("firewall-health-timeout")
+	firewallCreateTimeout := viper.GetDuration("firewall-create-timeout")
 
 	customDefaultStorageClass := current.CustomDefaultStorageClass
 	if viper.IsSet("default-storage-class") && disableDefaultStorageClass {
@@ -1098,16 +1089,6 @@ func (c *config) updateCluster(args []string) error {
 		clusterFeatures.CalicoEbpfDataplane = &calicoEbpf
 	}
 	if viper.IsSet("high-availability-control-plane") {
-		if v, _ := strconv.ParseBool(highAvailability); v {
-			if err := genericcli.PromptCustom(&genericcli.PromptConfig{
-				Message:     "You cannot use the high availability control plane feature gate in combination with the cluster forwarding backend of the audit extension. Please be aware that you cannot revert this feature gate after it was enabled.",
-				ShowAnswers: true,
-				Out:         c.out,
-			}); err != nil {
-				return err
-			}
-		}
-
 		clusterFeatures.HighAvailability = &highAvailability
 	}
 
@@ -1316,6 +1297,14 @@ func (c *config) updateCluster(args []string) error {
 	if firewallController != "" {
 		cur.FirewallControllerVersion = &firewallController
 	}
+	if viper.IsSet("firewall-health-timeout") {
+		fwht := int64(firewallHealthTimeout)
+		cur.FirewallHealthTimeout = &fwht
+	}
+	if viper.IsSet("firewall-create-timeout") {
+		fwct := int64(firewallCreateTimeout)
+		cur.FirewallCreateTimeout = &fwct
+	}
 	if len(firewallNetworks) > 0 {
 		if !sets.NewString(firewallNetworks...).Equal(sets.NewString(current.AdditionalNetworks...)) {
 			updateCausesDowntime = true
@@ -1415,6 +1404,9 @@ func (c *config) updateCluster(args []string) error {
 
 	if viper.IsSet("service-account-extend-token-expiration") {
 		k8s.ServiceAccountExtendTokenExpiration = &serviceAccountExtendTokenExpiration
+	}
+	if viper.IsSet("service-account-max-token-expiration") {
+		k8s.ServiceAccountMaxTokenExpiration = new(int64(serviceAccountMaxTokenExpiration))
 	}
 
 	cur.Kubernetes = k8s
@@ -1715,7 +1707,7 @@ func (c *config) clusterDNSManifest(args []string) error {
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
 									{
-										PathType: pointer.Pointer(networkingv1.PathTypePrefix),
+										PathType: new(networkingv1.PathTypePrefix),
 										Path:     "/",
 										Backend: networkingv1.IngressBackend{
 											Service: &networkingv1.IngressServiceBackend{
@@ -1822,32 +1814,6 @@ func (c *config) clusterMachineCycle(args []string) error {
 	request.Body = &models.V1ClusterMachineCycleRequest{Machineid: &mid}
 
 	shoot, err := c.cloud.Cluster.CycleMachine(request, nil)
-	if err != nil {
-		return err
-	}
-
-	ms := shoot.Payload.Machines
-	ms = append(ms, shoot.Payload.Firewalls...)
-
-	return c.listPrinter.Print(ms)
-}
-
-func (c *config) clusterMachineReinstall(args []string) error {
-	cid, err := c.clusterID("reinstall", args)
-	if err != nil {
-		return err
-	}
-	mid := viper.GetString("machineid")
-	img := viper.GetString("machineimage")
-
-	request := cluster.NewReinstallMachineParams()
-	request.SetID(cid)
-	request.Body = &models.V1ClusterMachineReinstallRequest{Machineid: &mid}
-	if img != "" {
-		request.Body.Imageid = img
-	}
-
-	shoot, err := c.cloud.Cluster.ReinstallMachine(request, nil)
 	if err != nil {
 		return err
 	}
