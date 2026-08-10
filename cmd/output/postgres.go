@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/cmd/helper"
 )
@@ -31,13 +32,16 @@ type (
 )
 
 func (p PostgresTablePrinter) Print(data []*models.V1PostgresResponse) {
-	p.shortHeader = []string{"ID", "Description", "Partition", "Tenant", "Project", "CPU", "Buffer", "Storage", "Backup-Config", "Replicas", "Version", "Age", "Status"}
-	p.wideHeader = []string{"ID", "Description", "Partition", "Tenant", "Project", "CPU", "Buffer", "Storage", "Backup-Config", "Replicas", "Version", "Mode", "Address", "Age", "Status", "Maintenance", "Labels"}
+	p.shortHeader = []string{"ID", "Description", "Partition", "Tenant", "Project", "CPU", "Memory", "Storage", "Backup-Config", "Replicas", "Version", "Age", "Status"}
+	p.wideHeader = []string{"ID", "Description", "Partition", "Tenant", "Project", "CPU", "Factor", "Memory", "Buffer", "Storage", "Backup-Config", "Replicas", "Version", "Mode", "Address", "Age", "Status", "Maintenance", "Labels"}
 
 	for _, pg := range data {
 		id := ""
 		if pg.ID != nil {
 			id = *pg.ID
+		}
+		if pg.DisableLoadBalancers {
+			id = color.RedString(id)
 		}
 		description := pg.Description
 		partitionID := pg.PartitionID
@@ -53,10 +57,19 @@ func (p PostgresTablePrinter) Print(data []*models.V1PostgresResponse) {
 		cpu := ""
 		buffer := ""
 		storage := ""
+		factor := ""
+		memory := ""
 		if pg.Size != nil {
 			cpu = pg.Size.CPU
+			memory = pg.Size.Memory
 			buffer = pg.Size.SharedBuffer
 			storage = pg.Size.StorageSize
+			if pg.Size.Memoryfactor != 0 {
+				// only show the factor if there is one. a value of 0
+				// indicates that there was no factor set when the database
+				// was allocated
+				factor = fmt.Sprintf("%d", pg.Size.Memoryfactor)
+			}
 		}
 		address := ""
 		if pg.Status.Socket != nil {
@@ -85,8 +98,8 @@ func (p PostgresTablePrinter) Print(data []*models.V1PostgresResponse) {
 			}
 		}
 
-		short := []string{id, description, partitionID, tenant, projectID, cpu, buffer, storage, backup, replicas, pg.Version, age, status}
-		wide := []string{id, description, partitionID, tenant, projectID, cpu, buffer, storage, backup, replicas, pg.Version, mode, address, age, status, maint, lbls}
+		short := []string{id, description, partitionID, tenant, projectID, cpu, memory, storage, backup, replicas, pg.Version, age, status}
+		wide := []string{id, description, partitionID, tenant, projectID, cpu, factor, memory, buffer, storage, backup, replicas, pg.Version, mode, address, age, status, maint, lbls}
 
 		p.addWideData(wide, pg)
 		p.addShortData(short, pg)
@@ -112,18 +125,27 @@ func (p PostgresVersionsTablePrinter) Print(data []*models.V1PostgresVersion) {
 	p.render()
 }
 func (p PostgresPartitionsTablePrinter) Print(data models.V1PostgresPartitionsResponse) {
-	p.wideHeader = []string{"Name", "AllowedTenants"}
+	p.wideHeader = []string{"Name", "AllowedTenants", "AllowedStorageClasses"}
 	p.shortHeader = p.wideHeader
 
 	for name, pg := range data {
 		tenants := []string{}
+		scs := []string{}
 		if len(pg.AllowedTenants) == 0 {
 			tenants = []string{"any"}
 		}
 		for k := range pg.AllowedTenants {
 			tenants = append(tenants, k)
 		}
-		wide := []string{name, strings.Join(tenants, ",")}
+
+		if len(pg.AllowedStorageClasses) == 0 {
+			scs = []string{"none"}
+		}
+		for k := range pg.AllowedStorageClasses {
+			scs = append(scs, k)
+		}
+
+		wide := []string{name, strings.Join(tenants, ","), strings.Join(scs, ",")}
 		short := wide
 
 		p.addWideData(wide, pg)
@@ -137,7 +159,7 @@ func (p PostgresBackupsTablePrinter) Print(data []*models.V1PostgresBackupConfig
 	if p.order == "" {
 		p.order = "date"
 	}
-	// FIXME oder is no implemented
+	// FIXME order is no implemented
 	for _, b := range data {
 		createdBy := ""
 		if b.CreatedBy != nil {

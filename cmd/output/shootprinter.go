@@ -2,12 +2,15 @@ package output
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/cmd/helper"
 	"github.com/gardener/gardener/pkg/apis/core/v1beta1"
+	"github.com/metal-stack/metal-lib/pkg/pointer"
 	"github.com/spf13/viper"
 )
 
@@ -36,8 +39,7 @@ type (
 )
 
 const (
-	ImageExpirationDaysDefault      = 14
-	KuberentesExpirationDaysDefault = 14
+	imageExpirationDaysDefault = 14
 )
 
 type shootStats struct {
@@ -52,12 +54,12 @@ func (s ShootConditionsTablePrinter) Print(data []*models.V1beta1Condition) {
 	s.shortHeader = []string{"LastTransition", "LastUpdate", "Message", "Reason", "Status", "Type"}
 	for _, condition := range data {
 		wide := []string{
-			strValue(condition.LastTransitionTime),
-			strValue(condition.LastUpdateTime),
-			strValue(condition.Message),
-			strValue(condition.Reason),
-			strValue(condition.Status),
-			strValue(condition.Type),
+			pointer.SafeDeref(condition.LastTransitionTime),
+			pointer.SafeDeref(condition.LastUpdateTime),
+			pointer.SafeDeref(condition.Message),
+			pointer.SafeDeref(condition.Reason),
+			pointer.SafeDeref(condition.Status),
+			pointer.SafeDeref(condition.Type),
 		}
 		short := wide
 		s.addWideData(wide, data)
@@ -70,12 +72,11 @@ func (s ShootLastErrorsTablePrinter) Print(data []*models.V1beta1LastError) {
 	s.wideHeader = []string{"Time", "Task", "Description"}
 	s.shortHeader = []string{"Time", "Task", "Description"}
 	for _, e := range data {
-		e := e
 
 		wide := []string{
-			strValue(&e.LastUpdateTime),
-			strValue(&e.TaskID),
-			strValue(e.Description),
+			pointer.SafeDeref(&e.LastUpdateTime),
+			pointer.SafeDeref(&e.TaskID),
+			pointer.SafeDeref(e.Description),
 		}
 		short := wide
 		s.addWideData(wide, data)
@@ -88,10 +89,10 @@ func (s ShootLastOperationTablePrinter) Print(data *models.V1beta1LastOperation)
 	s.wideHeader = []string{"Time", "State", "Progress", "Description"}
 	s.shortHeader = []string{"Time", "State", "Progress", "Description"}
 	wide := []string{
-		strValue(data.LastUpdateTime),
-		strValue(data.State),
+		pointer.SafeDeref(data.LastUpdateTime),
+		pointer.SafeDeref(data.State),
 		fmt.Sprintf("%d%% [%s]", *data.Progress, *data.Type),
-		strValue(data.Description),
+		pointer.SafeDeref(data.Description),
 	}
 	short := wide
 	s.addWideData(wide, data)
@@ -102,7 +103,7 @@ func (s ShootLastOperationTablePrinter) Print(data *models.V1beta1LastOperation)
 
 // Print a Shoot as table
 func (s ShootTablePrinter) Print(data []*models.V1ClusterResponse) {
-	s.wideHeader = []string{"UID", "Name", "Version", "Partition", "Seed", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "LastUpdate", "Purpose", "Privileged", "Audit", "Runtime", "Firewall", "Firewall Controller", "Log accepted conns", "Egress IPs", "Gardener"}
+	s.wideHeader = []string{"UID", "Name", "Version", "Partition", "Seed", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "Purpose", "Audit", "Firewall", "Firewall Controller", "Log accepted conns", "Egress IPs", "Gardener"}
 	s.shortHeader = []string{"UID", "Tenant", "Project", "Name", "Version", "Partition", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "Purpose"}
 
 	if s.order == "" {
@@ -121,7 +122,7 @@ func (s ShootTablePrinter) Print(data []*models.V1ClusterResponse) {
 }
 
 func (s ShootIssuesTablePrinter) Print(data []*models.V1ClusterResponse) {
-	s.wideHeader = []string{"UID", "", "Name", "Version", "Partition", "Seed", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "Purpose", "Privileged", "Audit", "Runtime", "Firewall", "Firewall Controller", "Log accepted conns", "Egress IPs"}
+	s.wideHeader = []string{"UID", "", "Name", "Version", "Partition", "Seed", "Domain", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "Purpose", "Audit", "Firewall", "Firewall Controller", "Log accepted conns", "Egress IPs"}
 	s.shortHeader = []string{"UID", "", "Tenant", "Project", "Name", "Version", "Partition", "Operation", "Progress", "Api", "Control", "Nodes", "System", "Size", "Age", "Purpose"}
 
 	if s.order == "" {
@@ -147,6 +148,43 @@ func (s ShootIssuesTablePrinter) Print(data []*models.V1ClusterResponse) {
 
 func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []string, []string) {
 	shootStats := newShootStats(shoot.Status)
+
+	if shoot.KubeAPIServerACL != nil && !*shoot.KubeAPIServerACL.Disabled {
+		shootStats.apiServer += "🔒"
+	}
+
+	if shoot.Audit != nil && shoot.Audit.Disabled != nil && !*shoot.Audit.Disabled && shoot.Audit.Backends != nil &&
+		((shoot.Audit.Backends.ClusterForwarding != nil && shoot.Audit.Backends.ClusterForwarding.Enabled != nil && *shoot.Audit.Backends.ClusterForwarding.Enabled) ||
+			(shoot.Audit.Backends.Splunk != nil && shoot.Audit.Backends.Splunk.Enabled != nil && *shoot.Audit.Backends.Splunk.Enabled)) {
+		shootStats.apiServer += "🔍"
+	}
+
+	if shoot.ClusterFeatures != nil {
+		if ok, err := strconv.ParseBool(pointer.SafeDeref(shoot.ClusterFeatures.HighAvailability)); err == nil && ok {
+			shootStats.apiServer += "🤹"
+		}
+		if ok, err := strconv.ParseBool(pointer.SafeDeref(shoot.ClusterFeatures.CalicoEbpfDataplane)); err == nil && ok {
+			shootStats.system += "🐝"
+		}
+		if pointer.SafeDeref(shoot.Cni) == "cilium" {
+			shootStats.system += "😫"
+		}
+
+	}
+
+	name := *shoot.Name
+	if shoot.NetworkAccessType != nil {
+		if *shoot.NetworkAccessType == models.V1ClusterCreateRequestNetworkAccessTypeForbidden {
+			name = color.RedString(name) + "🔐"
+		}
+		if *shoot.NetworkAccessType == models.V1ClusterCreateRequestNetworkAccessTypeRestricted {
+			name = color.YellowString(name) + "🔑"
+		}
+	}
+
+	if shoot.XDRConfig != nil && shoot.XDRConfig.Disabled != nil && !*shoot.XDRConfig.Disabled {
+		shootStats.nodes += "💩"
+	}
 
 	maintainEmoji := ""
 	var issues []string
@@ -184,15 +222,6 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 	if shoot.CreationTimestamp != nil {
 		age = helper.HumanizeDuration(time.Since(time.Time(*shoot.CreationTimestamp)))
 	}
-	lastReconcilation := ""
-	if shoot.Status != nil && shoot.Status.LastOperation != nil && shoot.Status.LastOperation.LastUpdateTime != nil {
-		lastUpdate, err := time.Parse(time.RFC3339, *shoot.Status.LastOperation.LastUpdateTime)
-		if err != nil {
-			lastReconcilation = "unknown"
-		} else {
-			lastReconcilation = helper.HumanizeDuration(time.Since(lastUpdate))
-		}
-	}
 
 	gardener := ""
 	if shoot.Status != nil && shoot.Status.Gardener != nil && shoot.Status.Gardener.Version != nil {
@@ -222,11 +251,6 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 		purpose = p[:4]
 	}
 
-	privileged := ""
-	if shoot.Kubernetes.AllowPrivilegedContainers != nil {
-		privileged = fmt.Sprintf("%t", *shoot.Kubernetes.AllowPrivilegedContainers)
-	}
-
 	audit := "Off"
 	if shoot.ControlPlaneFeatureGates != nil {
 		var ca, as bool
@@ -246,17 +270,11 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 		}
 	}
 
-	runtimes := []string{}
 	autoScaleMin := int32(0)
 	autoScaleMax := int32(0)
 	for _, w := range shoot.Workers {
 		autoScaleMin += *w.Minimum
 		autoScaleMax += *w.Maximum
-		if w.CRI != nil && *w.CRI != "" {
-			runtimes = append(runtimes, *w.CRI)
-		} else {
-			runtimes = append(runtimes, "docker")
-		}
 	}
 	currentMachines := "x"
 	if shoot.Machines != nil {
@@ -305,18 +323,15 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 
 	wide := []string{
 		*shoot.ID,
-		*shoot.Name,
+		name,
 		version, partition, seed,
 		operation,
 		progress,
 		shootStats.apiServer, shootStats.controlPlane, shootStats.nodes, shootStats.system,
 		size,
 		age,
-		lastReconcilation,
 		purpose,
-		privileged,
 		audit,
-		strings.Join(uniqueStringSlice(runtimes), "\n"),
 		firewallImage,
 		firewallController,
 		logAcceptedConnections,
@@ -327,7 +342,7 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 		*shoot.ID,
 		tenant,
 		project,
-		*shoot.Name,
+		name,
 		version, partition,
 		operation,
 		progress,
@@ -382,7 +397,7 @@ func imageExpires(m *models.ModelsV1MachineResponse) error {
 		return nil
 	}
 
-	viper.SetDefault("image-expiration-warning-days", ImageExpirationDaysDefault)
+	viper.SetDefault("image-expiration-warning-days", imageExpirationDaysDefault)
 	expirationWarningDays := viper.GetInt("image-expiration-warning-days")
 	expiresInHours := int(time.Until(t).Hours())
 
@@ -400,7 +415,7 @@ func kubernetesExpires(shoot *models.V1ClusterResponse) error {
 		return nil
 	}
 
-	viper.SetDefault("kubernetes-expiration-warning-days", ImageExpirationDaysDefault)
+	viper.SetDefault("kubernetes-expiration-warning-days", imageExpirationDaysDefault)
 	expirationWarningDays := viper.GetInt("kubernetes-expiration-warning-days")
 	expiresInHours := int(time.Until(time.Time(*shoot.Kubernetes.ExpirationDate)).Hours())
 

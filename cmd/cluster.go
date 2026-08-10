@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +26,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
 	"github.com/metal-stack/metal-lib/auth"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
+	"github.com/metal-stack/metal-lib/pkg/genericcli/printers"
 	"github.com/metal-stack/metal-lib/pkg/pointer"
 
 	"github.com/fi-ts/cloud-go/api/models"
@@ -42,73 +45,40 @@ import (
 	utiltaints "github.com/gardener/machine-controller-manager/pkg/util/taints"
 )
 
-type auditConfigOptionsMap map[string]struct {
-	Config      *models.V1Audit
-	Description string
-}
+func emojiHelpText() string {
+	return `
+Meaning of the emojis:
 
-func (a auditConfigOptionsMap) Names(withDescription bool) []string {
-	var names []string
-	for name, opt := range a {
-		if withDescription {
-			names = append(names, fmt.Sprintf("%s\t%s", name, opt.Description))
-		} else {
-			names = append(names, name)
-		}
-	}
-	return names
+🔒 Indicates that a cluster has configured an API server ACL. For cluster machines this emoji indicates that the machines were locked for deletion in metal-stack (only relevant for metal-stack operators).
+🤹 Indicates that a cluster has the high-availability control plane feature gate enabled.
+🐝 Indicates that a cluster has the calico ebpf data plane feature gate enabled.
+⚠️ Indicates that a cluster has issues (used in cluster issues command, e.g. indicates usage of an expired version of Kubernetes or machine image).
+🛡 For cluster firewalls indicates that the firewall has connected successfully through VPN to the metal-stack control plane (only relevant for metal-stack operators).
+`
 }
-
-var (
-	// options
-	auditConfigOptions = auditConfigOptionsMap{
-		"off": {
-			Description: "turn off the kube-apiserver auditlog",
-			Config: &models.V1Audit{
-				ClusterAudit:  pointer.Pointer(false),
-				AuditToSplunk: pointer.Pointer(false),
-			},
-		},
-		"on": {
-			Description: "turn on the kube-apiserver auditlog, and expose it as container log of the audittailer deployment in the audit namespace",
-			Config: &models.V1Audit{
-				ClusterAudit:  pointer.Pointer(true),
-				AuditToSplunk: pointer.Pointer(false),
-			},
-		},
-		"splunk": {
-			Description: "also forward the auditlog to a splunk HEC endpoint. create a custom splunk config manifest with \"cloudctl cluster splunk-config-manifest\"",
-			Config: &models.V1Audit{
-				ClusterAudit:  pointer.Pointer(true),
-				AuditToSplunk: pointer.Pointer(true),
-			},
-		},
-	}
-)
 
 func newClusterCmd(c *config) *cobra.Command {
 	clusterCmd := &cobra.Command{
 		Use:   "cluster",
 		Short: "manage clusters",
-		Long:  "TODO",
+		Long:  emojiHelpText(),
 	}
+
 	clusterCreateCmd := &cobra.Command{
 		Use:   "create",
 		Short: "create a cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.clusterCreate()
 		},
-		PreRun: bindPFlags,
 	}
-
 	clusterListCmd := &cobra.Command{
 		Use:     "list",
 		Short:   "list clusters",
+		Long:    emojiHelpText(),
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.clusterList()
 		},
-		PreRun: bindPFlags,
 	}
 	clusterDeleteCmd := &cobra.Command{
 		Use:     "delete <clusterid>",
@@ -118,16 +88,15 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterDelete(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterDescribeCmd := &cobra.Command{
 		Use:   "describe <clusterid>",
 		Short: "describe a cluster",
+		Long:  emojiHelpText(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.clusterDescribe(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterKubeconfigCmd := &cobra.Command{
 		Use:   "kubeconfig <clusterid>",
@@ -136,7 +105,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterKubeconfig(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 
 	clusterReconcileCmd := &cobra.Command{
@@ -146,7 +114,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.reconcileCluster(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterUpdateCmd := &cobra.Command{
 		Use:   "update <clusterid>",
@@ -155,7 +122,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.updateCluster(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterInputsCmd := &cobra.Command{
 		Use:   "inputs",
@@ -163,32 +129,32 @@ func newClusterCmd(c *config) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.clusterInputs()
 		},
-		PreRun: bindPFlags,
 	}
 	clusterMachineCmd := &cobra.Command{
 		Use:     "machine",
 		Aliases: []string{"machines"},
 		Short:   "list and access machines in the cluster",
+		Long:    emojiHelpText(),
 	}
 	clusterMachineListCmd := &cobra.Command{
 		Use:     "ls <clusterid>",
 		Aliases: []string{"list"},
 		Short:   "list machines of the cluster",
+		Long:    emojiHelpText(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.clusterMachines(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterIssuesCmd := &cobra.Command{
 		Use:     "issues [<clusterid>]",
 		Aliases: []string{"problems", "warnings"},
 		Short:   "lists cluster issues, shows required actions explicitly when id argument is given",
+		Long:    emojiHelpText(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.clusterIssues(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterMonitoringSecretCmd := &cobra.Command{
 		Use:   "monitoring-secret <clusterid>",
@@ -197,7 +163,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterMonitoringSecret(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterMachineSSHCmd := &cobra.Command{
 		Use:   "ssh <clusterid>",
@@ -206,7 +171,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterMachineSSH(args, false)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterMachineConsoleCmd := &cobra.Command{
 		Use:   "console <clusterid>",
@@ -215,7 +179,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterMachineSSH(args, true)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterMachineResetCmd := &cobra.Command{
 		Use:   "reset <clusterid>",
@@ -224,7 +187,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterMachineReset(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterMachineCycleCmd := &cobra.Command{
 		Use:   "cycle <clusterid>",
@@ -233,16 +195,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterMachineCycle(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
-	}
-	clusterMachineReinstallCmd := &cobra.Command{
-		Use:   "reinstall <clusterid>",
-		Short: "reinstall OS image onto a machine/firewall of the cluster",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.clusterMachineReinstall(args)
-		},
-		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterMachinePackagesCmd := &cobra.Command{
 		Use:   "packages <clusterid>",
@@ -251,7 +203,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterMachinePackages(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 	clusterLogsCmd := &cobra.Command{
 		Use:   "logs <clusterid>",
@@ -260,15 +211,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterLogs(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
-	}
-	clusterSplunkConfigManifestCmd := &cobra.Command{
-		Use:   "splunk-config-manifest",
-		Short: "create a manifest for a custom splunk configuration, overriding the default settings for splunk auditing",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.clusterSplunkConfigManifest()
-		},
-		PreRun: bindPFlags,
 	}
 	clusterDNSManifestCmd := &cobra.Command{
 		Use:   "dns-manifest <clusterid>",
@@ -277,7 +219,6 @@ func newClusterCmd(c *config) *cobra.Command {
 			return c.clusterDNSManifest(args)
 		},
 		ValidArgsFunction: c.comp.ClusterListCompletion,
-		PreRun:            bindPFlags,
 	}
 
 	clusterCreateCmd.Flags().String("name", "", "name of the cluster, max 10 characters. [required]")
@@ -293,7 +234,8 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().String("firewallimage", "", "machine image to use for the firewall. [optional]")
 	clusterCreateCmd.Flags().String("firewallcontroller", "", "version of the firewall-controller to use. [optional]")
 	clusterCreateCmd.Flags().BoolP("logacceptedconns", "", false, "also log accepted connections on the cluster firewall [optional]")
-	clusterCreateCmd.Flags().String("cri", "", "container runtime to use, only docker|containerd supported as alternative actually. [optional]")
+	clusterCreateCmd.Flags().Duration("firewall-health-timeout", 0, "period (e.g. \"20m\") after which a firewall that hasn't achieved ready status is considered dead. Set to 0 to disable. [optional]")
+	clusterCreateCmd.Flags().Duration("firewall-create-timeout", 0, "period (e.g. \"20m\") after which a firewall that hasn't been created is considered dead. Set to 0 to disable. [optional]")
 	clusterCreateCmd.Flags().Int32("minsize", 1, "minimal workers of the cluster.")
 	clusterCreateCmd.Flags().Int32("maxsize", 1, "maximal workers of the cluster.")
 	clusterCreateCmd.Flags().String("maxsurge", "1", "max number (e.g. 1) or percentage (e.g. 10%) of workers created during a update of the cluster.")
@@ -301,48 +243,58 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCreateCmd.Flags().StringSlice("labels", []string{}, "labels of the cluster")
 	clusterCreateCmd.Flags().StringSlice("external-networks", []string{}, "external networks of the cluster")
 	clusterCreateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <network>:<ip>; e.g.: --egress internet:1.2.3.4,extnet:123.1.1.1 --egress internet:1.2.3.5 [optional]")
-	clusterCreateCmd.Flags().BoolP("allowprivileged", "", false, "allow privileged containers the cluster (this is achieved through pod security policies and has no effect anymore on clusters >= v1.25")
-	clusterCreateCmd.Flags().String("default-pod-security-standard", "", "sets default pod security standard for clusters >= v1.23.x, defaults to restricted on clusters >= v1.25 (valid values: empty string, privileged, baseline, restricted)")
-	clusterCreateCmd.Flags().BoolP("disable-pod-security-policies", "", false, "disable pod security policies")
-	clusterCreateCmd.Flags().String("audit", "on", "audit logging of cluster API access; can be off, on (default) or splunk (logging to a predefined or custom splunk endpoint). [optional]")
+	clusterCreateCmd.Flags().String("default-pod-security-standard", "privileged", "sets default pod security standard for clusters >= v1.23.x, defaults to restricted on clusters >= v1.25 (valid values: empty string, privileged, baseline, restricted)")
 	clusterCreateCmd.Flags().Duration("healthtimeout", 0, "period (e.g. \"24h\") after which an unhealthy node is declared failed and will be replaced. [optional]")
 	clusterCreateCmd.Flags().Duration("draintimeout", 0, "period (e.g. \"3h\") after which a draining node will be forcefully deleted. [optional]")
 	clusterCreateCmd.Flags().Bool("encrypted-storage-classes", false, "enables the deployment of encrypted duros storage classes into the cluster. please refer to the user manual to properly use volume encryption. [optional]")
 	clusterCreateCmd.Flags().BoolP("autoupdate-kubernetes", "", false, "enables automatic updates of the kubernetes patch version of the cluster [optional]")
-	clusterCreateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this deletes worker nodes! [optional]")
+	clusterCreateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this rolls worker nodes! [optional]")
+	clusterCreateCmd.Flags().Bool("autoupdate-firewallimage", false, "enables automatic updates of the firewall image, be aware that this rolls firewalls! [optional]")
+	clusterCreateCmd.Flags().String("maintenance-begin", "220000+0100", "defines the beginning of the nightly maintenance time window (e.g. for autoupdates) in the format HHMMSS+ZONE, e.g. \"220000+0100\". [optional]")
+	clusterCreateCmd.Flags().String("maintenance-end", "233000+0100", "defines the end of the nightly maintenance time window (e.g. for autoupdates) in the format HHMMSS+ZONE, e.g. \"233000+0100\". [optional]")
 	clusterCreateCmd.Flags().String("default-storage-class", "", "set default storage class to given name, must be one of the managed storage classes")
 	clusterCreateCmd.Flags().String("max-pods-per-node", "", "set number of maximum pods per node (default: 510). Lower numbers allow for more node per cluster. [optional]")
 	clusterCreateCmd.Flags().String("cni", "", "the network plugin used in this cluster, defaults to calico. please note that cilium support is still Alpha and we are happy to receive feedback. [optional]")
+	clusterCreateCmd.Flags().Bool("enable-calico-ebpf", false, "enables calico cni to use eBPF data plane and DSR configuration, for increased performance and preserving source IP addresses. [optional]")
 	clusterCreateCmd.Flags().BoolP("enable-node-local-dns", "", false, "enables node local dns cache on the cluster nodes. [optional].")
 	clusterCreateCmd.Flags().BoolP("disable-forwarding-to-upstream-dns", "", false, "disables direct forwarding of queries to external dns servers when node-local-dns is enabled. All dns queries will go through coredns. [optional].")
+	clusterCreateCmd.Flags().BoolP("enable-csi-lvm", "", false, "enables csi-lvm deployment in the cluster, which is however deprecated. a way to migrate existing volumes to the successor project csi-driver-lvm will be provided in the future. [optional].")
+	clusterCreateCmd.Flags().BoolP("enable-csi-driver-lvm", "", false, "enables csi-driver-lvm deployment in the cluster. [optional].")
+	clusterCreateCmd.Flags().StringSlice("kube-apiserver-acl-allowed-cidrs", []string{}, "comma-separated list of external CIDRs allowed to connect to the kube-apiserver (e.g. \"212.34.68.0/24,212.34.89.0/27\")")
+	clusterCreateCmd.Flags().Bool("enable-kube-apiserver-acl", false, "restricts access from outside to the kube-apiserver to the source ip addresses set by --kube-apiserver-acl-allowed-cidrs [optional].")
+	clusterCreateCmd.Flags().String("network-isolation", "", "defines restrictions to external network communication for the cluster, can be one of baseline|restricted|isolated. baseline sets no special restrictions to external networks, restricted by default only allows external traffic to explicitly allowed destinations, forbidden disallows communication with external networks except for a limited set of networks. Please consult the documentation for detailed descriptions of the individual modes as these cannot be altered anymore after creation. [optional]")
+	clusterCreateCmd.Flags().Bool("high-availability-control-plane", false, "enables a high availability control plane for the cluster, cannot be disabled again")
+	clusterCreateCmd.Flags().Bool("service-account-extend-token-expiration", false, "extends the token expiration time for projected service accounts tokens")
+	clusterCreateCmd.Flags().Duration("service-account-max-token-expiration", 0, "sets the max token expiration duration for projected service account tokens")
+	clusterCreateCmd.Flags().Int64("kubelet-pod-pid-limit", 0, "controls the maximum number of process IDs per pod allowed by the kubelet")
 
-	must(clusterCreateCmd.MarkFlagRequired("name"))
-	must(clusterCreateCmd.MarkFlagRequired("project"))
-	must(clusterCreateCmd.MarkFlagRequired("partition"))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("seed", c.comp.SeedListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("external-networks", c.comp.NetworkListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("version", c.comp.VersionListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("machinetype", c.comp.MachineTypeListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("machineimage", c.comp.MachineImageListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("firewalltype", c.comp.FirewallTypeListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("firewallimage", c.comp.FirewallImageListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("firewallcontroller", c.comp.FirewallControllerVersionListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("default-pod-security-standard", c.comp.PodSecurityListCompletion))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("cri", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"docker", "containerd"}, cobra.ShellCompDirectiveNoFileComp
-	}))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("cni", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	genericcli.Must(clusterCreateCmd.MarkFlagRequired("name"))
+	genericcli.Must(clusterCreateCmd.MarkFlagRequired("project"))
+	genericcli.Must(clusterCreateCmd.MarkFlagRequired("partition"))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("seed", c.comp.SeedListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("external-networks", c.comp.NetworkListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("version", c.comp.VersionListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("machinetype", c.comp.MachineTypeListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("machineimage", c.comp.MachineImageListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("firewalltype", c.comp.FirewallTypeListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("firewallimage", c.comp.FirewallImageListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("firewallcontroller", c.comp.FirewallControllerVersionListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("default-pod-security-standard", c.comp.PodSecurityListCompletion))
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("cni", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{
 			"calico\tcalico networking plugin. this is the cluster default.",
 			"cilium\tcilium networking plugin. please note that cilium support is still Alpha and we are happy to receive feedback.",
 		}, cobra.ShellCompDirectiveNoFileComp
 	}))
-	must(clusterCreateCmd.RegisterFlagCompletionFunc("audit", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return auditConfigOptions.Names(true),
-			cobra.ShellCompDirectiveNoFileComp
+	genericcli.Must(clusterCreateCmd.RegisterFlagCompletionFunc("network-isolation", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			models.V1ClusterCreateRequestNetworkAccessTypeBaseline + "\tno special restrictions for external network traffic, service type loadbalancer possible in all networks",
+			models.V1ClusterCreateRequestNetworkAccessTypeRestricted + "\texternal network traffic needs to be allowed explicitly, own cluster wide network policies possible, service type loadbalancer possible in all networks",
+			models.V1ClusterCreateRequestNetworkAccessTypeForbidden + "\texternal network traffic is not possible except for allowed networks , own cluster wide network policies not possible, service type loadbalancer possible only in allowed networks, for the allowed networks please see cluster inputs",
+		}, cobra.ShellCompDirectiveNoFileComp
 	}))
 
 	clusterDescribeCmd.Flags().Bool("show-machines", false, "does not return machines in the output")
@@ -356,13 +308,13 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterListCmd.Flags().String("tenant", "", "show clusters of given tenant")
 	clusterListCmd.Flags().StringSlice("labels", nil, "show clusters of given labels")
 	clusterListCmd.Flags().String("purpose", "", "show clusters of given purpose")
-	must(clusterListCmd.RegisterFlagCompletionFunc("id", c.comp.ClusterListCompletion))
-	must(clusterListCmd.RegisterFlagCompletionFunc("name", c.comp.ClusterNameCompletion))
-	must(clusterListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
-	must(clusterListCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
-	must(clusterListCmd.RegisterFlagCompletionFunc("seed", c.comp.SeedListCompletion))
-	must(clusterListCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
-	must(clusterListCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
+	genericcli.Must(clusterListCmd.RegisterFlagCompletionFunc("id", c.comp.ClusterListCompletion))
+	genericcli.Must(clusterListCmd.RegisterFlagCompletionFunc("name", c.comp.ClusterNameCompletion))
+	genericcli.Must(clusterListCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(clusterListCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+	genericcli.Must(clusterListCmd.RegisterFlagCompletionFunc("seed", c.comp.SeedListCompletion))
+	genericcli.Must(clusterListCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
+	genericcli.Must(clusterListCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
 
 	// Cluster update --------------------------------------------------------------------
 	clusterUpdateCmd.Flags().String("workergroup", "", "the name of the worker group to apply updates to, only required when there are multiple worker groups.")
@@ -379,16 +331,15 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().String("firewallimage", "", "machine image to use for the firewall.")
 	clusterUpdateCmd.Flags().String("firewallcontroller", "", "version of the firewall-controller to use.")
 	clusterUpdateCmd.Flags().BoolP("logacceptedconns", "", false, "enables logging of accepted connections on the cluster firewall")
+	clusterUpdateCmd.Flags().Duration("firewall-health-timeout", 0, "period (e.g. \"20m\") after which a firewall that hasn't achieved ready status is considered dead. Set to 0 to disable.")
+	clusterUpdateCmd.Flags().Duration("firewall-create-timeout", 0, "period (e.g. \"20m\") after which a firewall that hasn't been created is considered dead. Set to 0 to disable.")
 	clusterUpdateCmd.Flags().String("machinetype", "", "machine type to use for the nodes.")
 	clusterUpdateCmd.Flags().String("machineimage", "", "machine image to use for the nodes, must be in the form of <name>-<version> ")
 	clusterUpdateCmd.Flags().StringSlice("addlabels", []string{}, "labels to add to the cluster")
 	clusterUpdateCmd.Flags().StringSlice("removelabels", []string{}, "labels to remove from the cluster")
-	clusterUpdateCmd.Flags().BoolP("allowprivileged", "", false, "allow privileged containers the cluster (this is achieved through pod security policies and has no effect anymore on clusters >=v1.25")
 	clusterUpdateCmd.Flags().String("default-pod-security-standard", "", "set default pod security standard for cluster >=v 1.23.x, send empty string explicitly to disable pod security standards (valid values: empty string, privileged, baseline, restricted)")
-	clusterUpdateCmd.Flags().BoolP("disable-pod-security-policies", "", false, "disable pod security policies")
-	clusterUpdateCmd.Flags().String("audit", "on", "audit logging of cluster API access; can be off, on or splunk (logging to a predefined or custom splunk endpoint).")
 	clusterUpdateCmd.Flags().String("purpose", "", fmt.Sprintf("purpose of the cluster, can be one of %s. SLA is only given on production clusters.", strings.Join(completion.ClusterPurposes, "|")))
-	clusterUpdateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <networkid>:<semicolon-separated ips>; e.g.: --egress internet:1.2.3.4;1.2.3.5 --egress extnet:123.1.1.1 [optional]. Use --egress none to remove all egress rules.")
+	clusterUpdateCmd.Flags().StringSlice("egress", []string{}, "static egress ips per network, must be in the form <networkid>:<semicolon-separated ips>; e.g.: --egress internet:1.2.3.4;1.2.3.5 --egress extnet:123.1.1.1 [optional]. Use \"--egress none\" to remove all egress rules.")
 	clusterUpdateCmd.Flags().StringSlice("external-networks", []string{}, "external networks of the cluster")
 	clusterUpdateCmd.Flags().Duration("healthtimeout", 0, "period (e.g. \"24h\") after which an unhealthy node is declared failed and will be replaced. (0 = provider-default)")
 	clusterUpdateCmd.Flags().Duration("draintimeout", 0, "period (e.g. \"3h\") after which a draining node will be forcefully deleted. (0 = provider-default)")
@@ -396,39 +347,40 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterUpdateCmd.Flags().String("maxunavailable", "", "max number (e.g. 0) or percentage (e.g. 10%) of workers that can be unavailable during a update of the cluster.")
 	clusterUpdateCmd.Flags().BoolP("autoupdate-kubernetes", "", false, "enables automatic updates of the kubernetes patch version of the cluster")
 	clusterUpdateCmd.Flags().BoolP("autoupdate-machineimages", "", false, "enables automatic updates of the worker node images of the cluster, be aware that this deletes worker nodes!")
-	clusterUpdateCmd.Flags().BoolP("reversed-vpn", "", false, "enables usage of reversed-vpn instead of konnectivity tunnel for worker connectivity.")
+	clusterUpdateCmd.Flags().Bool("autoupdate-firewallimage", false, "enables automatic updates of the firewall image, be aware that this rolls firewalls! [optional]")
+	clusterUpdateCmd.Flags().String("maintenance-begin", "", "defines the beginning of the nightly maintenance time window (e.g. for autoupdates) in the format HHMMSS+ZONE, e.g. \"220000+0100\". [optional]")
+	clusterUpdateCmd.Flags().String("maintenance-end", "", "defines the end of the nightly maintenance time window (e.g. for autoupdates) in the format HHMMSS+ZONE, e.g. \"233000+0100\". [optional]")
 	clusterUpdateCmd.Flags().Bool("encrypted-storage-classes", false, "enables the deployment of encrypted duros storage classes into the cluster. please refer to the user manual to properly use volume encryption.")
-	clusterUpdateCmd.Flags().String("default-storage-class", "", "set default storage class to given name, must be one of the managed storage classes")
-	clusterUpdateCmd.Flags().BoolP("disable-custom-default-storage-class", "", false, "if set to true, no default class is deployed, you have to set one of your storageclasses manually to default")
+	clusterUpdateCmd.Flags().String("default-storage-class", "", "set default storage class to given name, set to empty string in order not to set a default storage class and define one manually")
+	clusterUpdateCmd.Flags().BoolP("disable-custom-default-storage-class", "", false, "do not deploy a user-defined default storage class anymore and make the provider choose the default storage class.")
 	clusterUpdateCmd.Flags().BoolP("enable-node-local-dns", "", false, "enables node local dns cache on the cluster nodes. [optional]. WARNING: changing this value will lead to rolling of the worker nodes [optional]")
 	clusterUpdateCmd.Flags().BoolP("disable-forwarding-to-upstream-dns", "", false, "disables direct forwarding of queries to external dns servers when node-local-dns is enabled. All dns queries will go through coredns [optional].")
+	clusterUpdateCmd.Flags().BoolP("enable-csi-lvm", "", false, "enables csi-lvm deployment in the cluster, which is however deprecated. a way to migrate existing volumes to the successor project csi-driver-lvm will be provided in the future. [optional].")
+	clusterUpdateCmd.Flags().BoolP("enable-csi-driver-lvm", "", false, "enables csi-driver-lvm deployment in the cluster. [optional].")
+	clusterUpdateCmd.Flags().StringSlice("kube-apiserver-acl-set-allowed-cidrs", []string{}, "comma-separated list of external CIDRs allowed to connect to the kube-apiserver (e.g. \"212.34.68.0/24,212.34.89.0/27\")")
+	clusterUpdateCmd.Flags().StringSlice("kube-apiserver-acl-add-to-allowed-cidrs", []string{}, "comma-separated list of external CIDRs to add to the allowed CIDRs to connect to the kube-apiserver (e.g. \"212.34.68.0/24,212.34.89.0/27\")")
+	clusterUpdateCmd.Flags().StringSlice("kube-apiserver-acl-remove-from-allowed-cidrs", []string{}, "comma-separated list of external CIDRs to be removed from the allowed CIDRs to connect to the kube-apiserver (e.g. \"212.34.68.0/24,212.34.89.0/27\")")
+	clusterUpdateCmd.Flags().Bool("enable-kube-apiserver-acl", false, "restricts access from outside to the kube-apiserver to the source ip addresses set by --kube-apiserver-acl-* [optional].")
+	clusterUpdateCmd.Flags().Bool("high-availability-control-plane", false, "enables a high availability control plane for the cluster, cannot be disabled again")
+	clusterUpdateCmd.Flags().Bool("service-account-extend-token-expiration", false, "extends the token expiration time for projected service accounts tokens")
+	clusterUpdateCmd.Flags().Duration("service-account-max-token-expiration", 0, "sets the max token expiration duration for projected service account tokens. (set to 0 to use kubernetes default)")
+	clusterUpdateCmd.Flags().Int64("kubelet-pod-pid-limit", 0, "controls the maximum number of process IDs per pod allowed by the kubelet")
+	clusterUpdateCmd.Flags().Bool("enable-calico-ebpf", false, "enables calico cni to use eBPF data plane and DSR configuration, for increased performance and preserving source IP addresses. [optional]")
 
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("version", c.comp.VersionListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("workerversion", c.comp.VersionListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("firewalltype", c.comp.FirewallTypeListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("firewallimage", c.comp.FirewallImageListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("seed", c.comp.SeedListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("firewallcontroller", c.comp.FirewallControllerVersionListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("machinetype", c.comp.MachineTypeListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("machineimage", c.comp.MachineImageListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("default-pod-security-standard", c.comp.PodSecurityListCompletion))
-	must(clusterUpdateCmd.RegisterFlagCompletionFunc("audit", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return auditConfigOptions.Names(true),
-			cobra.ShellCompDirectiveNoFileComp
-	}))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("version", c.comp.VersionListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("workerversion", c.comp.VersionListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("firewalltype", c.comp.FirewallTypeListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("firewallimage", c.comp.FirewallImageListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("seed", c.comp.SeedListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("firewallcontroller", c.comp.FirewallControllerVersionListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("machinetype", c.comp.MachineTypeListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("machineimage", c.comp.MachineImageListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("purpose", c.comp.ClusterPurposeListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("default-pod-security-standard", c.comp.PodSecurityListCompletion))
+	genericcli.Must(clusterUpdateCmd.RegisterFlagCompletionFunc("default-storage-class", c.comp.ClusterStorageClassListCompletion))
 
 	clusterInputsCmd.Flags().String("partition", "", "partition of the constraints.")
-	must(clusterInputsCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
-
-	// Cluster splunk config manifest --------------------------------------------------------------------
-	clusterSplunkConfigManifestCmd.Flags().String("token", "", "the hec token to use for this cluster's audit logs")
-	clusterSplunkConfigManifestCmd.Flags().String("index", "", "the splunk index to use for this cluster's audit logs")
-	clusterSplunkConfigManifestCmd.Flags().String("hechost", "", "the hostname or IP of the splunk HEC endpoint")
-	clusterSplunkConfigManifestCmd.Flags().Int("hecport", 0, "port on which the splunk HEC endpoint is listening")
-	clusterSplunkConfigManifestCmd.Flags().Bool("tls", false, "whether to use TLS encryption. You do need to specify a CA file.")
-	clusterSplunkConfigManifestCmd.Flags().String("cafile", "", "the path to the file containing the ca certificate (chain) for the splunk HEC endpoint")
-	clusterSplunkConfigManifestCmd.Flags().String("cabase64", "", "the base64-encoded ca certificate (chain) for the splunk HEC endpoint")
+	genericcli.Must(clusterInputsCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
 
 	// Cluster dns manifest --------------------------------------------------------------------
 	clusterDNSManifestCmd.Flags().String("type", "ingress", "either of type ingress or service")
@@ -439,44 +391,39 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterDNSManifestCmd.Flags().String("backend-name", "my-backend", "the name of the backend")
 	clusterDNSManifestCmd.Flags().Int32("backend-port", 443, "the port of the backend")
 	clusterDNSManifestCmd.Flags().String("ingress-class", "nginx", "the ingress class name")
-	must(clusterDNSManifestCmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"ingress", "service"}, cobra.ShellCompDirectiveNoFileComp)))
+	genericcli.Must(clusterDNSManifestCmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"ingress", "service"}, cobra.ShellCompDirectiveNoFileComp)))
 
 	// Cluster machine ... --------------------------------------------------------------------
 	clusterMachineSSHCmd.Flags().String("machineid", "", "machine to connect to.")
-	must(clusterMachineSSHCmd.MarkFlagRequired("machineid"))
-	must(clusterMachineSSHCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterFirewallListCompletion))
+	clusterMachineSSHCmd.Flags().String("reason", "", "a short description why ssh access is required")
+	genericcli.Must(clusterMachineSSHCmd.MarkFlagRequired("machineid"))
+	genericcli.Must(clusterMachineSSHCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterFirewallListCompletion))
 
 	clusterMachineConsoleCmd.Flags().String("machineid", "", "machine to connect to.")
-	must(clusterMachineConsoleCmd.MarkFlagRequired("machineid"))
-	must(clusterMachineConsoleCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
+	genericcli.Must(clusterMachineConsoleCmd.MarkFlagRequired("machineid"))
+	genericcli.Must(clusterMachineConsoleCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
 
 	clusterMachineResetCmd.Flags().String("machineid", "", "machine to reset.")
-	must(clusterMachineResetCmd.MarkFlagRequired("machineid"))
-	must(clusterMachineResetCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
+	genericcli.Must(clusterMachineResetCmd.MarkFlagRequired("machineid"))
+	genericcli.Must(clusterMachineResetCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
 
 	clusterMachineCycleCmd.Flags().String("machineid", "", "machine to reset.")
-	must(clusterMachineCycleCmd.MarkFlagRequired("machineid"))
-	must(clusterMachineCycleCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
-
-	clusterMachineReinstallCmd.Flags().String("machineid", "", "machine to reinstall.")
-	clusterMachineReinstallCmd.Flags().String("machineimage", "", "image to reinstall (optional).")
-	must(clusterMachineReinstallCmd.MarkFlagRequired("machineid"))
-	must(clusterMachineReinstallCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
+	genericcli.Must(clusterMachineCycleCmd.MarkFlagRequired("machineid"))
+	genericcli.Must(clusterMachineCycleCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
 
 	clusterMachinePackagesCmd.Flags().String("machineid", "", "machine to connect to.")
-	must(clusterMachinePackagesCmd.MarkFlagRequired("machineid"))
-	must(clusterMachinePackagesCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
+	genericcli.Must(clusterMachinePackagesCmd.MarkFlagRequired("machineid"))
+	genericcli.Must(clusterMachinePackagesCmd.RegisterFlagCompletionFunc("machineid", c.comp.ClusterMachineListCompletion))
 
 	clusterMachineCmd.AddCommand(clusterMachineListCmd)
 	clusterMachineCmd.AddCommand(clusterMachineSSHCmd)
 	clusterMachineCmd.AddCommand(clusterMachineConsoleCmd)
 	clusterMachineCmd.AddCommand(clusterMachineResetCmd)
 	clusterMachineCmd.AddCommand(clusterMachineCycleCmd)
-	clusterMachineCmd.AddCommand(clusterMachineReinstallCmd)
 	clusterMachineCmd.AddCommand(clusterMachinePackagesCmd)
 
-	clusterReconcileCmd.Flags().String("operation", models.V1ClusterReconcileRequestOperationReconcile, "Executes a cluster \"reconcile\" operation.")
-	must(clusterReconcileCmd.RegisterFlagCompletionFunc("operation", c.comp.ClusterReconcileOperationCompletion))
+	clusterReconcileCmd.Flags().String("operation", models.V1ClusterReconcileRequestOperationReconcile, fmt.Sprintf("Executes a cluster \"reconcile\" operation, can be one of %s.", strings.Join(completion.ClusterReconcileOperations, "|")))
+	genericcli.Must(clusterReconcileCmd.RegisterFlagCompletionFunc("operation", c.comp.ClusterReconcileOperationCompletion))
 
 	clusterIssuesCmd.Flags().String("id", "", "show clusters of given id")
 	clusterIssuesCmd.Flags().String("name", "", "show clusters of given name")
@@ -484,10 +431,10 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterIssuesCmd.Flags().String("partition", "", "show clusters in partition")
 	clusterIssuesCmd.Flags().String("tenant", "", "show clusters of given tenant")
 
-	must(clusterIssuesCmd.RegisterFlagCompletionFunc("name", c.comp.ClusterNameCompletion))
-	must(clusterIssuesCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
-	must(clusterIssuesCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
-	must(clusterIssuesCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
+	genericcli.Must(clusterIssuesCmd.RegisterFlagCompletionFunc("name", c.comp.ClusterNameCompletion))
+	genericcli.Must(clusterIssuesCmd.RegisterFlagCompletionFunc("project", c.comp.ProjectListCompletion))
+	genericcli.Must(clusterIssuesCmd.RegisterFlagCompletionFunc("partition", c.comp.PartitionListCompletion))
+	genericcli.Must(clusterIssuesCmd.RegisterFlagCompletionFunc("tenant", c.comp.TenantListCompletion))
 
 	clusterKubeconfigCmd.Flags().Bool("merge", false, "merges the cluster's kubeconfig into the current active kubeconfig, otherwise an individual kubeconfig is printed to console only")
 	clusterKubeconfigCmd.Flags().Bool("set-context", false, "when setting the merge parameter to true, immediately activates the cluster's context")
@@ -503,9 +450,10 @@ func newClusterCmd(c *config) *cobra.Command {
 	clusterCmd.AddCommand(clusterMachineCmd)
 	clusterCmd.AddCommand(clusterLogsCmd)
 	clusterCmd.AddCommand(clusterIssuesCmd)
-	clusterCmd.AddCommand(clusterSplunkConfigManifestCmd)
 	clusterCmd.AddCommand(clusterDNSManifestCmd)
 	clusterCmd.AddCommand(clusterMonitoringSecretCmd)
+	clusterCmd.AddCommand(newClusterAuditCmd(c))
+	clusterCmd.AddCommand(newClusterXdrCmd(c))
 
 	return clusterCmd
 }
@@ -526,43 +474,76 @@ func (c *config) clusterCreate() error {
 	encryptedStorageClasses := strconv.FormatBool(viper.GetBool("encrypted-storage-classes"))
 	enableNodeLocalDNS := viper.GetBool("enable-node-local-dns")
 	disableForwardToUpstreamDNS := viper.GetBool("disable-forwarding-to-upstream-dns")
+	highAvailability := strconv.FormatBool(viper.GetBool("high-availability-control-plane"))
+	serviceAccountExtendTokenExpiration := viper.GetBool("service-account-extend-token-expiration")
+	serviceAccountMaxTokenExpiration := viper.GetDuration("service-account-max-token-expiration")
+	podpidLimit := viper.GetInt64("kubelet-pod-pid-limit")
+	calicoEbpf := strconv.FormatBool(viper.GetBool("enable-calico-ebpf"))
 
-	cri := viper.GetString("cri")
 	var cni string
 	if viper.IsSet("cni") {
 		cni = viper.GetString("cni")
 	}
-
-	minsize := viper.GetInt32("minsize")
-	maxsize := viper.GetInt32("maxsize")
+	var minsize, maxsize *int32
+	if viper.IsSet("minsize") {
+		minsize = new(viper.GetInt32("minsize"))
+	}
+	if viper.IsSet("maxsize") {
+		maxsize = new(viper.GetInt32("maxsize"))
+	}
 	maxsurge := viper.GetString("maxsurge")
 	maxunavailable := viper.GetString("maxunavailable")
 
 	healthtimeout := viper.GetDuration("healthtimeout")
 	draintimeout := viper.GetDuration("draintimeout")
+	firewallHealthTimeout := viper.GetDuration("firewall-health-timeout")
+	firewallCreateTimeout := viper.GetDuration("firewall-create-timeout")
 
-	var allowprivileged *bool
-	if viper.IsSet("allowprivileged") {
-		allowprivileged = pointer.Pointer(viper.GetBool("allowprivileged"))
-	}
 	var defaultPodSecurityStandard *string
 	if viper.IsSet("default-pod-security-standard") {
-		defaultPodSecurityStandard = pointer.Pointer(viper.GetString("default-pod-security-standard"))
-	}
-	var disablePodSecurityPolicies *bool
-	if viper.IsSet("disable-pod-security-policies") {
-		disablePodSecurityPolicies = pointer.Pointer(viper.GetBool("disable-pod-security-policies"))
+		defaultPodSecurityStandard = new(viper.GetString("default-pod-security-standard"))
 	}
 
-	audit := viper.GetString("audit")
+	var networkAccessType *string
+	if viper.IsSet("network-isolation") {
+		networkAccessType = new(viper.GetString("network-isolation"))
+		switch *networkAccessType {
+		case models.V1ClusterCreateRequestNetworkAccessTypeForbidden:
+			fmt.Printf(`
+WARNING: You are going to create a cluster which has no internet access with the following consequences:
+- pulling images is only possible from private registries you provide, these registries must be resolvable from the public dns, their IP must be located in one of the allowed networks (see cluster inputs), and must be secured with a trusted TLS certificate
+- service type loadbalancer can only be created in networks which are specified in the allowed networks (see cluster inputs)
+- cluster wide network policies can only be created in certain network ranges which are specified in the allowed networks (see cluster inputs)
+- It is not possible to change this cluster back to %q after creation
+`, models.V1ClusterCreateRequestNetworkAccessTypeBaseline)
+			err := helper.Prompt("Are you sure? (y/n)", "y")
+			if err != nil {
+				return err
+			}
+		case models.V1ClusterCreateRequestNetworkAccessTypeRestricted:
+			fmt.Printf(`
+WARNING: You are going to create a cluster that has no default internet access with the following consequences:
+- pulling images is only possible from private registries you provide, these registries must be resolvable from the public dns and must be secured with a trusted TLS certificate
+- you can create cluster wide network policies to the outside world without restrictions
+- pulling container images from registries requires to create a corresponding CWNP to these registries
+- It is not possible to change this cluster back to %q after creation
+`, models.V1ClusterCreateRequestNetworkAccessTypeBaseline)
+			err := helper.Prompt("Are you sure? (y/n)", "y")
+			if err != nil {
+				return err
+			}
+		case models.V1ClusterCreateRequestNetworkAccessTypeBaseline:
+			// Noop
+		}
+	}
 
 	labels := viper.GetStringSlice("labels")
 
 	// FIXME helper and validation
 	networks := viper.GetStringSlice("external-networks")
 	egress := viper.GetStringSlice("egress")
-	maintenanceBegin := "220000+0100"
-	maintenanceEnd := "233000+0100"
+	maintenanceBegin := viper.GetString("maintenance-begin")
+	maintenanceEnd := viper.GetString("maintenance-end")
 
 	version := viper.GetString("version")
 	if version == "" {
@@ -610,19 +591,6 @@ func (c *config) clusterCreate() error {
 		log.Fatal(err)
 	}
 
-	switch cri {
-	case "containerd":
-	case "docker":
-	case "":
-	default:
-		log.Fatalf("provided cri:%s is not supported, only docker or containerd at the moment", cri)
-	}
-
-	auditConfig, ok := auditConfigOptions[audit]
-	if !ok {
-		return fmt.Errorf("audit value %s is not supported; choose one of %v", audit, auditConfigOptions.Names(false))
-	}
-
 	var customDefaultStorageClass *models.V1CustomDefaultStorageClass
 	if viper.IsSet("default-storage-class") {
 		class := viper.GetString("default-storage-class")
@@ -639,25 +607,21 @@ func (c *config) clusterCreate() error {
 		Purpose:     &purpose,
 		Workers: []*models.V1Worker{
 			{
-				Minimum:        &minsize,
-				Maximum:        &maxsize,
+				Minimum:        minsize,
+				Maximum:        maxsize,
 				MaxSurge:       &maxsurge,
 				MaxUnavailable: &maxunavailable,
 				MachineType:    &machineType,
 				MachineImage:   &machineImage,
-				CRI:            &cri,
 			},
 		},
 		FirewallSize:              &firewallType,
 		FirewallImage:             &firewallImage,
 		FirewallControllerVersion: &firewallController,
 		Kubernetes: &models.V1Kubernetes{
-			AllowPrivilegedContainers:  allowprivileged,
 			Version:                    &version,
 			DefaultPodSecurityStandard: defaultPodSecurityStandard,
-			DisablePodSecurityPolicies: disablePodSecurityPolicies,
 		},
-		Audit: auditConfig.Config,
 		Maintenance: &models.V1Maintenance{
 			TimeWindow: &models.V1MaintenanceTimeWindow{
 				Begin: &maintenanceBegin,
@@ -667,21 +631,24 @@ func (c *config) clusterCreate() error {
 		AdditionalNetworks: networks,
 		PartitionID:        &partition,
 		ClusterFeatures: &models.V1ClusterFeatures{
-			// always set reversed vpn for new clusters
-			ReversedVPN:            pointer.Pointer("true"),
 			LogAcceptedConnections: &logAcceptedConnections,
 			DurosStorageEncryption: &encryptedStorageClasses,
 		},
 		CustomDefaultStorageClass: customDefaultStorageClass,
 		Cni:                       cni,
+		NetworkAccessType:         networkAccessType,
 	}
 
-	if viper.IsSet("autoupdate-kubernetes") || viper.IsSet("autoupdate-machineimages") || purpose == string(v1beta1.ShootPurposeEvaluation) {
+	if viper.IsSet("autoupdate-kubernetes") ||
+		viper.IsSet("autoupdate-machineimages") ||
+		viper.IsSet("autoupdate-firewallimage") ||
+		purpose == string(v1beta1.ShootPurposeEvaluation) {
+
 		scr.Maintenance.AutoUpdate = &models.V1MaintenanceAutoUpdate{}
 
 		// default to true for evaluation clusters
 		if purpose == string(v1beta1.ShootPurposeEvaluation) {
-			scr.Maintenance.AutoUpdate.KubernetesVersion = pointer.Pointer(true)
+			scr.Maintenance.AutoUpdate.KubernetesVersion = new(true)
 		}
 		if viper.IsSet("autoupdate-kubernetes") {
 			auto := viper.GetBool("autoupdate-kubernetes")
@@ -690,6 +657,10 @@ func (c *config) clusterCreate() error {
 		if viper.IsSet("autoupdate-machineimages") {
 			auto := viper.GetBool("autoupdate-machineimages")
 			scr.Maintenance.AutoUpdate.MachineImage = &auto
+		}
+		if viper.IsSet("autoupdate-firewallimage") {
+			auto := viper.GetBool("autoupdate-firewallimage")
+			scr.Maintenance.AutoUpdate.FirewallImage = &auto
 		}
 	}
 
@@ -720,6 +691,76 @@ func (c *config) clusterCreate() error {
 		scr.SystemComponents.NodeLocalDNS.DisableForwardToUpstreamDNS = &disableForwardToUpstreamDNS
 	}
 
+	if viper.IsSet("kube-apiserver-acl-allowed-cidrs") || viper.IsSet("enable-kube-apiserver-acl") {
+		if !viper.GetBool("yes-i-really-mean-it") && viper.IsSet("enable-kube-apiserver-acl") {
+			return fmt.Errorf("--enable-kube-apiserver-acl is set but you forgot to add --yes-i-really-mean-it")
+		}
+
+		if viper.GetBool("enable-kube-apiserver-acl") {
+			fmt.Println("WARNING: Restricting access to the kube-apiserver prevents FI-TS operators from helping you in case of any issues in your cluster.")
+			err = helper.Prompt("Are you sure? (y/n)", "y")
+			if err != nil {
+				return err
+			}
+		}
+
+		scr.KubeAPIServerACL = &models.V1KubeAPIServerACL{
+			CIDRs:    viper.GetStringSlice("kube-apiserver-acl-allowed-cidrs"),
+			Disabled: new(!viper.GetBool("enable-kube-apiserver-acl")),
+		}
+	}
+
+	if viper.IsSet("enable-calico-ebpf") {
+		if activate, _ := strconv.ParseBool(calicoEbpf); activate {
+			if err := genericcli.PromptCustom(&genericcli.PromptConfig{
+				Message:     "Enabling the Calico eBPF feature gate is still a beta feature. Be aware that this may impact the network policies in your cluster as source IP addresses are preserved with this configuration.",
+				ShowAnswers: true,
+				Out:         c.out,
+			}); err != nil {
+				return err
+			}
+		}
+
+		scr.ClusterFeatures.CalicoEbpfDataplane = &calicoEbpf
+	}
+
+	if viper.IsSet("enable-csi-lvm") {
+		if viper.GetBool("enable-csi-lvm") {
+			if err := genericcli.PromptCustom(&genericcli.PromptConfig{
+				Message:     "Enabling csi-lvm is deprecated. Do you really want to enable csi-lvm?\n\nWe suggest using a different CSI provider or the project's successor called csi-driver-lvm instead (which can be enabled using --enable-csi-driver-lvm).",
+				ShowAnswers: true,
+				Out:         c.out,
+			}); err != nil {
+				return err
+			}
+		}
+
+		scr.ClusterFeatures.DisableCsiLvm = new(strconv.FormatBool(!viper.GetBool("enable-csi-lvm")))
+	}
+
+	if viper.IsSet("enable-csi-driver-lvm") {
+		scr.ClusterFeatures.EnableCsiDriverLvm = new(strconv.FormatBool(viper.GetBool("enable-csi-driver-lvm")))
+	}
+
+	if viper.IsSet("high-availability-control-plane") {
+		scr.ClusterFeatures.HighAvailability = &highAvailability
+	}
+
+	if viper.IsSet("service-account-extend-token-expiration") {
+		scr.Kubernetes.ServiceAccountExtendTokenExpiration = &serviceAccountExtendTokenExpiration
+	}
+
+	if viper.IsSet("service-account-max-token-expiration") {
+		scr.Kubernetes.ServiceAccountMaxTokenExpiration = new(int64(serviceAccountMaxTokenExpiration))
+	}
+
+	if viper.IsSet("kubelet-pod-pid-limit") {
+		if !viper.GetBool("yes-i-really-mean-it") {
+			return fmt.Errorf("--kubelet-pod-pid-limit can only be changed in combination with --yes-i-really-mean-it because this change can lead to pods not starting anymore in the cluster")
+		}
+		scr.Kubernetes.PodPIDsLimit = &podpidLimit
+	}
+
 	egressRules := makeEgressRules(egress)
 	if len(egressRules) > 0 {
 		scr.EgressRules = egressRules
@@ -733,13 +774,23 @@ func (c *config) clusterCreate() error {
 		scr.Workers[0].DrainTimeout = int64(draintimeout)
 	}
 
+	if viper.IsSet("firewall-health-timeout") {
+		fwht := int64(firewallHealthTimeout)
+		scr.FirewallHealthTimeout = &fwht
+	}
+
+	if viper.IsSet("firewall-create-timeout") {
+		fwct := int64(firewallCreateTimeout)
+		scr.FirewallCreateTimeout = &fwct
+	}
+
 	request := cluster.NewCreateClusterParams()
 	request.SetBody(scr)
 	shoot, err := c.cloud.Cluster.CreateCluster(request, nil)
 	if err != nil {
 		return err
 	}
-	return output.New().Print(shoot.Payload)
+	return c.describePrinter.Print(shoot.Payload)
 }
 
 func (c *config) clusterList() error {
@@ -751,10 +802,8 @@ func (c *config) clusterList() error {
 	project := viper.GetString("project")
 	purpose := viper.GetString("purpose")
 	labels := viper.GetStringSlice("labels")
-	var cfr *models.V1ClusterFindRequest
+	cfr := &models.V1ClusterFindRequest{}
 	if id != "" || name != "" || tenant != "" || partition != "" || seed != "" || project != "" || purpose != "" || len(labels) > 0 {
-		cfr = &models.V1ClusterFindRequest{}
-
 		if id != "" {
 			cfr.ID = &id
 		}
@@ -788,22 +837,13 @@ func (c *config) clusterList() error {
 			cfr.Labels = labelMap
 		}
 	}
-	if cfr != nil {
-		fcp := cluster.NewFindClustersParams()
-		fcp.SetBody(cfr)
-		response, err := c.cloud.Cluster.FindClusters(fcp, nil)
-		if err != nil {
-			return err
-		}
-		return output.New().Print(response.Payload)
-	}
-
-	request := cluster.NewListClustersParams()
-	shoots, err := c.cloud.Cluster.ListClusters(request, nil)
+	fcp := cluster.NewFindClustersParams()
+	fcp.SetBody(cfr)
+	response, err := c.cloud.Cluster.FindClusters(fcp, nil)
 	if err != nil {
 		return err
 	}
-	return output.New().Print(shoots.Payload)
+	return c.listPrinter.Print(response.Payload)
 }
 
 func (c *config) clusterKubeconfig(args []string) error {
@@ -877,13 +917,15 @@ type sshkeypair struct {
 	vpn        *models.V1VPN
 }
 
-func (c *config) sshKeyPair(clusterID string) (*sshkeypair, error) {
-	request := cluster.NewGetSSHKeyPairParams()
-	request.SetID(clusterID)
-	credentials, err := c.cloud.Cluster.GetSSHKeyPair(request, nil)
+func (c *config) sshKeyPair(clusterID string, omitVPN bool, reason *string) (*sshkeypair, error) {
+	credentials, err := c.cloud.Cluster.GetSSHKeyPair(cluster.NewGetSSHKeyPairParams().WithID(clusterID).WithBody(&models.V1ClusterCredentialsRequest{
+		Reason:  reason,
+		Omitvpn: omitVPN,
+	}), nil)
 	if err != nil {
 		return nil, err
 	}
+
 	privateKey, err := base64.StdEncoding.DecodeString(*credentials.Payload.SSHKeyPair.PrivateKey)
 	if err != nil {
 		return nil, err
@@ -916,7 +958,7 @@ func (c *config) reconcileCluster(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(shoot.Payload)
+	return c.describePrinter.Print(shoot.Payload)
 }
 
 func (c *config) updateCluster(args []string) error {
@@ -954,8 +996,13 @@ func (c *config) updateCluster(args []string) error {
 	defaultStorageClass := viper.GetString("default-storage-class")
 	disableDefaultStorageClass := viper.GetBool("disable-custom-default-storage-class")
 
-	reversedVPN := strconv.FormatBool(viper.GetBool("reversed-vpn"))
 	encryptedStorageClasses := strconv.FormatBool(viper.GetBool("encrypted-storage-classes"))
+	highAvailability := strconv.FormatBool(viper.GetBool("high-availability-control-plane"))
+	serviceAccountExtendTokenExpiration := viper.GetBool("service-account-extend-token-expiration")
+	serviceAccountMaxTokenExpiration := viper.GetDuration("service-account-max-token-expiration")
+	calicoEbpf := strconv.FormatBool(viper.GetBool("enable-calico-ebpf"))
+
+	podpidLimit := viper.GetInt64("kubelet-pod-pid-limit")
 
 	workerlabels, err := helper.LabelsToMap(workerlabelslice)
 	if err != nil {
@@ -972,7 +1019,6 @@ func (c *config) updateCluster(args []string) error {
 
 	var workertaints []*models.V1Taint
 	for _, t := range coreworkertaints {
-		t := t
 		workertaints = append(workertaints, &models.V1Taint{
 			Key:    &t.Key,
 			Value:  t.Value,
@@ -990,6 +1036,8 @@ func (c *config) updateCluster(args []string) error {
 
 	healthtimeout := viper.GetDuration("healthtimeout")
 	draintimeout := viper.GetDuration("draintimeout")
+	firewallHealthTimeout := viper.GetDuration("firewall-health-timeout")
+	firewallCreateTimeout := viper.GetDuration("firewall-create-timeout")
 
 	customDefaultStorageClass := current.CustomDefaultStorageClass
 	if viper.IsSet("default-storage-class") && disableDefaultStorageClass {
@@ -1010,11 +1058,40 @@ func (c *config) updateCluster(args []string) error {
 	if viper.IsSet("encrypted-storage-classes") {
 		clusterFeatures.DurosStorageEncryption = &encryptedStorageClasses
 	}
-	if viper.IsSet("reversed-vpn") {
-		clusterFeatures.ReversedVPN = &reversedVPN
-	}
 	if viper.IsSet("logacceptedconns") {
 		clusterFeatures.LogAcceptedConnections = &logAcceptedConnections
+	}
+	if viper.IsSet("enable-csi-lvm") {
+		if viper.GetBool("enable-csi-lvm") {
+			if err := genericcli.PromptCustom(&genericcli.PromptConfig{
+				Message:     "Enabling csi-lvm is deprecated. Do you really want to enable csi-lvm?\n\nWe suggest using a different CSI provider or the project's successor called csi-driver-lvm instead (which can be enabled using --enable-csi-driver-lvm).",
+				ShowAnswers: true,
+				Out:         c.out,
+			}); err != nil {
+				return err
+			}
+		}
+
+		clusterFeatures.DisableCsiLvm = new(strconv.FormatBool(!viper.GetBool("enable-csi-lvm")))
+	}
+	if viper.IsSet("enable-csi-driver-lvm") {
+		clusterFeatures.EnableCsiDriverLvm = new(strconv.FormatBool(viper.GetBool("enable-csi-driver-lvm")))
+	}
+	if viper.IsSet("enable-calico-ebpf") {
+		if activate, _ := strconv.ParseBool(calicoEbpf); activate {
+			if err := genericcli.PromptCustom(&genericcli.PromptConfig{
+				Message:     "Enabling the Calico eBPF feature gate is still a beta feature. Be aware that this may impact the network policies in your cluster as source IP addresses are preserved with this configuration.",
+				ShowAnswers: true,
+				Out:         c.out,
+			}); err != nil {
+				return err
+			}
+		}
+
+		clusterFeatures.CalicoEbpfDataplane = &calicoEbpf
+	}
+	if viper.IsSet("high-availability-control-plane") {
+		clusterFeatures.HighAvailability = &highAvailability
 	}
 
 	workergroupKubernetesVersion := viper.GetString("workerversion")
@@ -1026,6 +1103,7 @@ func (c *config) updateCluster(args []string) error {
 			AutoUpdate: &models.V1MaintenanceAutoUpdate{
 				KubernetesVersion: current.Maintenance.AutoUpdate.KubernetesVersion,
 				MachineImage:      current.Maintenance.AutoUpdate.MachineImage,
+				FirewallImage:     current.Maintenance.AutoUpdate.FirewallImage,
 			},
 		},
 		ClusterFeatures:           &clusterFeatures,
@@ -1049,7 +1127,7 @@ func (c *config) updateCluster(args []string) error {
 				}
 			}
 			if worker == nil && !removeworkergroup {
-				fmt.Println("Adding a new worker group to the cluster. Please note that running multiple worker groups leads to higher basic costs of the cluster!")
+				fmt.Printf("Adding a new worker group to cluster:%q. Please note that running multiple worker groups leads to higher basic costs of the cluster!\n", *current.Name)
 				err = helper.Prompt("Are you sure? (y/n)", "y")
 				if err != nil {
 					return err
@@ -1057,10 +1135,10 @@ func (c *config) updateCluster(args []string) error {
 
 				worker = &models.V1Worker{
 					Name:           &workergroupname,
-					Minimum:        pointer.Pointer(int32(1)),
-					Maximum:        pointer.Pointer(int32(1)),
-					MaxSurge:       pointer.Pointer("1"),
-					MaxUnavailable: pointer.Pointer("0"),
+					Minimum:        new(int32(1)),
+					Maximum:        new(int32(1)),
+					MaxSurge:       new("1"),
+					MaxUnavailable: new("0"),
 					Labels:         workerlabels,
 					Annotations:    workerannotations,
 					Taints:         workertaints,
@@ -1079,7 +1157,7 @@ func (c *config) updateCluster(args []string) error {
 				return fmt.Errorf("worker group %s not found", workergroupname)
 			}
 
-			fmt.Println("WARNING. Removing a worker group cannot be undone and causes the loss of local data on the deleted nodes.")
+			fmt.Printf("WARNING. Removing a worker group from cluster:%q cannot be undone and causes the loss of local data on the deleted nodes.\n", *current.Name)
 			err = helper.Prompt("Are you sure? (y/n)", "y")
 			if err != nil {
 				return err
@@ -1087,7 +1165,6 @@ func (c *config) updateCluster(args []string) error {
 
 			var newWorkers []*models.V1Worker
 			for _, w := range workers {
-				w := w
 				if w.Name != nil && *w.Name == *worker.Name {
 					continue
 				}
@@ -1109,7 +1186,7 @@ func (c *config) updateCluster(args []string) error {
 					}
 				}
 				if int(maxsize) < c {
-					fmt.Println("WARNING. New maxsize is lower than currently active machines. A random worker node which is still in use will be removed.")
+					fmt.Printf("WARNING. New maxsize of cluster:%q is lower than currently active machines. A random worker node which is still in use will be removed.\n", *current.Name)
 					err = helper.Prompt("Are you sure? (y/n)", "y")
 					if err != nil {
 						return err
@@ -1158,13 +1235,13 @@ func (c *config) updateCluster(args []string) error {
 
 			if viper.IsSet("workerversion") {
 				if pointer.SafeDeref(worker.KubernetesVersion) != "" && workergroupKubernetesVersion == "" {
-					fmt.Println("WARNING. Removing the worker version override may update your worker nodes to the version of the api server.")
+					fmt.Printf("WARNING. Removing the worker version override of cluster:%q may update your worker nodes to the version of the api server.\n", *current.Name)
 					err = helper.Prompt("Are you sure? (y/n)", "y")
 					if err != nil {
 						return err
 					}
 				}
-				worker.KubernetesVersion = pointer.Pointer(workergroupKubernetesVersion)
+				worker.KubernetesVersion = new(workergroupKubernetesVersion)
 			}
 
 			if maxsurge != "" {
@@ -1187,6 +1264,24 @@ func (c *config) updateCluster(args []string) error {
 		auto := viper.GetBool("autoupdate-machineimages")
 		cur.Maintenance.AutoUpdate.MachineImage = &auto
 	}
+	if viper.IsSet("autoupdate-firewallimage") {
+		auto := viper.GetBool("autoupdate-firewallimage")
+		cur.Maintenance.AutoUpdate.FirewallImage = &auto
+	}
+	if viper.IsSet("maintenance-begin") {
+		begin := viper.GetString("maintenance-begin")
+		if cur.Maintenance.TimeWindow == nil {
+			cur.Maintenance.TimeWindow = &models.V1MaintenanceTimeWindow{}
+		}
+		cur.Maintenance.TimeWindow.Begin = &begin
+	}
+	if viper.IsSet("maintenance-end") {
+		if cur.Maintenance.TimeWindow == nil {
+			cur.Maintenance.TimeWindow = &models.V1MaintenanceTimeWindow{}
+		}
+		end := viper.GetString("maintenance-end")
+		cur.Maintenance.TimeWindow.End = &end
+	}
 
 	updateCausesDowntime := false
 	if firewallImage != "" {
@@ -1204,11 +1299,61 @@ func (c *config) updateCluster(args []string) error {
 	if firewallController != "" {
 		cur.FirewallControllerVersion = &firewallController
 	}
+	if viper.IsSet("firewall-health-timeout") {
+		fwht := int64(firewallHealthTimeout)
+		cur.FirewallHealthTimeout = &fwht
+	}
+	if viper.IsSet("firewall-create-timeout") {
+		fwct := int64(firewallCreateTimeout)
+		cur.FirewallCreateTimeout = &fwct
+	}
 	if len(firewallNetworks) > 0 {
 		if !sets.NewString(firewallNetworks...).Equal(sets.NewString(current.AdditionalNetworks...)) {
 			updateCausesDowntime = true
 		}
 		cur.AdditionalNetworks = firewallNetworks
+	}
+
+	if viper.IsSet("kube-apiserver-acl-set-allowed-cidrs") || viper.IsSet("enable-kube-apiserver-acl") ||
+		viper.IsSet("kube-apiserver-acl-add-to-allowed-cidrs") || viper.IsSet("kube-apiserver-acl-remove-from-allowed-cidrs") {
+
+		newACL := current.KubeAPIServerACL
+		if newACL == nil {
+			newACL = &models.V1KubeAPIServerACL{
+				CIDRs:    []string{},
+				Disabled: new(true),
+			}
+		}
+
+		if viper.IsSet("enable-kube-apiserver-acl") {
+			if !viper.GetBool("yes-i-really-mean-it") {
+				return fmt.Errorf("--enable-kube-apiserver-acl is set but you forgot to add --yes-i-really-mean-it")
+			}
+			newACL.Disabled = new(!viper.GetBool("enable-kube-apiserver-acl"))
+		}
+
+		if viper.IsSet("enable-kube-apiserver-acl") && viper.GetBool("enable-kube-apiserver-acl") {
+			fmt.Printf("WARNING: Restricting access of cluster:%q to the kube-apiserver prevents FI-TS operators from helping you in case of any issues in your cluster.\n", *current.Name)
+			err = helper.Prompt("Are you sure? (y/n)", "y")
+			if err != nil {
+				return err
+			}
+		}
+
+		for _, r := range viper.GetStringSlice("kube-apiserver-acl-remove-from-allowed-cidrs") {
+			newACL.CIDRs = slices.DeleteFunc(newACL.CIDRs, func(s string) bool {
+				return s == r
+			})
+		}
+		newACL.CIDRs = append(newACL.CIDRs, viper.GetStringSlice("kube-apiserver-acl-add-to-allowed-cidrs")...)
+
+		if viper.IsSet("kube-apiserver-acl-set-allowed-cidrs") {
+			newACL.CIDRs = viper.GetStringSlice("kube-apiserver-acl-set-allowed-cidrs")
+		}
+
+		slices.Sort(newACL.CIDRs)
+		newACL.CIDRs = slices.Compact(newACL.CIDRs)
+		cur.KubeAPIServerACL = newACL
 	}
 
 	if purpose != "" {
@@ -1245,36 +1390,28 @@ func (c *config) updateCluster(args []string) error {
 	if version != "" {
 		k8s.Version = &version
 	}
-	if viper.IsSet("allowprivileged") {
-		if !viper.GetBool("yes-i-really-mean-it") {
-			return fmt.Errorf("--allowprivileged is set but you forgot to add --yes-i-really-mean-it")
-		}
-		k8s.AllowPrivilegedContainers = pointer.Pointer(viper.GetBool("allowprivileged"))
-	}
 	if viper.IsSet("default-pod-security-standard") {
 		if !viper.GetBool("yes-i-really-mean-it") {
 			return fmt.Errorf("--default-pod-security-standard is set but you forgot to add --yes-i-really-mean-it")
 		}
-		k8s.DefaultPodSecurityStandard = pointer.Pointer(viper.GetString("default-pod-security-standard"))
+		k8s.DefaultPodSecurityStandard = new(viper.GetString("default-pod-security-standard"))
 	}
-	if viper.IsSet("disable-pod-security-policies") {
+
+	if viper.IsSet("kubelet-pod-pid-limit") {
 		if !viper.GetBool("yes-i-really-mean-it") {
-			return fmt.Errorf("--disable-pod-security-policies set but you forgot to add --yes-i-really-mean-it")
+			return fmt.Errorf("--kubelet-pod-pid-limit can only be changed in combination with --yes-i-really-mean-it because this change can lead to pods not starting anymore in the cluster")
 		}
-		k8s.DisablePodSecurityPolicies = pointer.Pointer(viper.GetBool("disable-pod-security-policies"))
+		k8s.PodPIDsLimit = &podpidLimit
+	}
+
+	if viper.IsSet("service-account-extend-token-expiration") {
+		k8s.ServiceAccountExtendTokenExpiration = &serviceAccountExtendTokenExpiration
+	}
+	if viper.IsSet("service-account-max-token-expiration") {
+		k8s.ServiceAccountMaxTokenExpiration = new(int64(serviceAccountMaxTokenExpiration))
 	}
 
 	cur.Kubernetes = k8s
-
-	if viper.IsSet("audit") {
-		audit := viper.GetString("audit")
-		auditConfig, ok := auditConfigOptions[audit]
-		if !ok {
-			return fmt.Errorf("audit value %s is not supported; choose one of %v", audit, auditConfigOptions.Names(false))
-		}
-		cur.Audit = auditConfig.Config
-	}
-
 	cur.EgressRules = makeEgressRules(egress)
 
 	if viper.IsSet("enable-node-local-dns") {
@@ -1302,7 +1439,7 @@ func (c *config) updateCluster(args []string) error {
 	}
 
 	if updateCausesDowntime && !viper.GetBool("yes-i-really-mean-it") {
-		fmt.Println("This cluster update will cause downtime.")
+		fmt.Printf("This update of cluster:%q will cause downtime.\n", *current.Name)
 		err = helper.Prompt("Are you sure? (y/n)", "y")
 		if err != nil {
 			return err
@@ -1314,7 +1451,7 @@ func (c *config) updateCluster(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(shoot.Payload)
+	return c.describePrinter.Print(shoot.Payload)
 }
 
 func (c *config) clusterDelete(args []string) error {
@@ -1333,7 +1470,7 @@ func (c *config) clusterDelete(args []string) error {
 		return err
 	}
 
-	must(output.New().Print(resp.Payload))
+	genericcli.Must(c.listPrinter.Print(resp.Payload))
 
 	firstPartOfClusterID := strings.Split(*resp.Payload.ID, "-")[0]
 	fmt.Println("Please answer some security questions to delete this cluster")
@@ -1352,7 +1489,7 @@ func (c *config) clusterDelete(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(cl.Payload)
+	return c.describePrinter.Print(cl.Payload)
 }
 
 func (c *config) clusterDescribe(args []string) error {
@@ -1363,14 +1500,14 @@ func (c *config) clusterDescribe(args []string) error {
 	findRequest := cluster.NewFindClusterParams()
 	findRequest.SetID(ci)
 	if !viper.GetBool("show-machines") {
-		findRequest.WithReturnMachines(pointer.Pointer(false))
+		findRequest.WithReturnMachines(new(false))
 	}
 	shoot, err := c.cloud.Cluster.FindCluster(findRequest, nil)
 	if err != nil {
 		return err
 	}
-	viper.Set("output-format", "yaml")
-	return output.New().Print(shoot.Payload)
+
+	return printers.NewYAMLPrinter().Print(shoot.Payload)
 }
 
 func (c *config) clusterIssues(args []string) error {
@@ -1409,7 +1546,7 @@ func (c *config) clusterIssues(args []string) error {
 			if err != nil {
 				return err
 			}
-			return output.New().Print(output.ShootIssuesResponses(response.Payload))
+			return c.listPrinter.Print(output.ShootIssuesResponses(response.Payload))
 		}
 
 		request := cluster.NewListClustersParams().WithReturnMachines(&boolTrue)
@@ -1417,7 +1554,7 @@ func (c *config) clusterIssues(args []string) error {
 		if err != nil {
 			return err
 		}
-		return output.New().Print(output.ShootIssuesResponses(shoots.Payload))
+		return c.listPrinter.Print(output.ShootIssuesResponses(shoots.Payload))
 	}
 
 	ci, err := c.clusterID("issues", args)
@@ -1430,7 +1567,7 @@ func (c *config) clusterIssues(args []string) error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(output.ShootIssuesResponse(shoot.Payload))
+	return c.listPrinter.Print(output.ShootIssuesResponse(shoot.Payload))
 }
 
 func (c *config) clusterMachines(args []string) error {
@@ -1445,16 +1582,19 @@ func (c *config) clusterMachines(args []string) error {
 		return err
 	}
 
-	if output.New().Type() != "table" {
-		return output.New().Print(shoot.Payload)
+	if viper.GetString("output-format") != "table" {
+		return c.describePrinter.Print(shoot.Payload)
 	}
 
 	fmt.Println("Cluster:")
-	must(output.New().Print(shoot.Payload))
+	genericcli.Must(c.listPrinter.Print(shoot.Payload))
 
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 	fmt.Println("\nMachines:")
+
+	// TODO: when migrating to new table printer from metal-lib, use existing listprinter!
+	// return c.listPrinter.Print(ms)
 	return output.New().Print(ms)
 }
 
@@ -1478,13 +1618,13 @@ func (c *config) clusterLogs(args []string) error {
 		lastErrors = shoot.Payload.Status.LastErrors
 	}
 
-	if output.New().Type() != "table" {
+	if viper.GetString("output-format") != "table" {
 		type s struct {
 			Conditions    []*models.V1beta1Condition
 			LastOperation *models.V1beta1LastOperation
 			LastErrors    []*models.V1beta1LastError
 		}
-		return output.New().Print(s{
+		return c.describePrinter.Print(s{
 			Conditions:    conditions,
 			LastOperation: lastOperation,
 			LastErrors:    lastErrors,
@@ -1492,19 +1632,19 @@ func (c *config) clusterLogs(args []string) error {
 	}
 
 	fmt.Println("Conditions:")
-	err = output.New().Print(conditions)
+	err = c.listPrinter.Print(conditions)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("\nLast Errors:")
-	err = output.New().Print(lastErrors)
+	err = c.listPrinter.Print(lastErrors)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("\nLast Operation:")
-	return output.New().Print(lastOperation)
+	return c.listPrinter.Print(lastOperation)
 }
 
 func (c *config) clusterInputs() error {
@@ -1518,57 +1658,7 @@ func (c *config) clusterInputs() error {
 		return err
 	}
 
-	return output.New().Print(sc)
-}
-
-func (c *config) clusterSplunkConfigManifest() error {
-	secret := corev1.Secret{
-		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "splunk-config", Namespace: "kube-system"},
-		Type:       corev1.SecretTypeOpaque,
-		StringData: map[string]string{},
-		Data:       map[string][]byte{},
-	}
-	if viper.IsSet("token") {
-		secret.StringData["hecToken"] = viper.GetString("token")
-	}
-	if viper.IsSet("index") {
-		secret.StringData["index"] = viper.GetString("index")
-	}
-	if viper.IsSet("hechost") {
-		secret.StringData["hecHost"] = viper.GetString("hechost")
-	}
-	if viper.IsSet("hecport") {
-		secret.StringData["hecPort"] = strconv.Itoa(viper.GetInt("hecport"))
-	}
-	if viper.IsSet("tls") {
-		if !viper.IsSet("cafile") && !viper.IsSet("cabase64") {
-			return fmt.Errorf("you need to supply a ca certificate when using TLS")
-		}
-		secret.StringData["tlsEnabled"] = strconv.FormatBool(viper.GetBool("tls"))
-	}
-	if viper.IsSet("cafile") {
-		if viper.IsSet("cabase64") {
-			return fmt.Errorf("specify ca certificate either through cafile or through cabase64, do not use both flags")
-		}
-		hecCAFile, err := os.ReadFile(viper.GetString("cafile"))
-		if err != nil {
-			return err
-		}
-		secret.StringData["hecCAFile"] = string(hecCAFile)
-	}
-	if viper.IsSet("cabase64") {
-		hecCAFileString := viper.GetString("cabase64")
-		_, err := base64.StdEncoding.DecodeString(hecCAFileString)
-		if err != nil {
-			return fmt.Errorf("unable to decode ca file string:%w", err)
-		}
-		secret.Data["hecCAFile"] = []byte(hecCAFileString)
-	}
-
-	helper.MustPrintKubernetesResource(secret)
-
-	return nil
+	return printers.NewYAMLPrinter().Print(sc.Payload)
 }
 
 func (c *config) clusterDNSManifest(args []string) error {
@@ -1577,7 +1667,7 @@ func (c *config) clusterDNSManifest(args []string) error {
 		return err
 	}
 
-	cluster, err := c.cloud.Cluster.FindCluster(cluster.NewFindClusterParams().WithID(ci).WithReturnMachines(pointer.Pointer(false)), nil)
+	cluster, err := c.cloud.Cluster.FindCluster(cluster.NewFindClusterParams().WithID(ci).WithReturnMachines(new(false)), nil)
 	if err != nil {
 		return err
 	}
@@ -1612,7 +1702,7 @@ func (c *config) clusterDNSManifest(args []string) error {
 				Annotations: annotations,
 			},
 			Spec: networkingv1.IngressSpec{
-				IngressClassName: pointer.Pointer(viper.GetString("ingress-class")),
+				IngressClassName: new(viper.GetString("ingress-class")),
 				Rules: []networkingv1.IngressRule{
 					{
 						Host: domain,
@@ -1620,7 +1710,7 @@ func (c *config) clusterDNSManifest(args []string) error {
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
 									{
-										PathType: pointer.Pointer(networkingv1.PathTypePrefix),
+										PathType: new(networkingv1.PathTypePrefix),
 										Path:     "/",
 										Backend: networkingv1.IngressBackend{
 											Service: &networkingv1.IngressServiceBackend{
@@ -1712,7 +1802,7 @@ func (c *config) clusterMachineReset(args []string) error {
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 
-	return output.New().Print(ms)
+	return c.listPrinter.Print(ms)
 }
 
 func (c *config) clusterMachineCycle(args []string) error {
@@ -1734,33 +1824,7 @@ func (c *config) clusterMachineCycle(args []string) error {
 	ms := shoot.Payload.Machines
 	ms = append(ms, shoot.Payload.Firewalls...)
 
-	return output.New().Print(ms)
-}
-
-func (c *config) clusterMachineReinstall(args []string) error {
-	cid, err := c.clusterID("reinstall", args)
-	if err != nil {
-		return err
-	}
-	mid := viper.GetString("machineid")
-	img := viper.GetString("machineimage")
-
-	request := cluster.NewReinstallMachineParams()
-	request.SetID(cid)
-	request.Body = &models.V1ClusterMachineReinstallRequest{Machineid: &mid}
-	if img != "" {
-		request.Body.Imageid = img
-	}
-
-	shoot, err := c.cloud.Cluster.ReinstallMachine(request, nil)
-	if err != nil {
-		return err
-	}
-
-	ms := shoot.Payload.Machines
-	ms = append(ms, shoot.Payload.Firewalls...)
-
-	return output.New().Print(ms)
+	return c.listPrinter.Print(ms)
 }
 
 func (c *config) clusterMachinePackages(args []string) error {
@@ -1792,7 +1856,9 @@ func (c *config) clusterMachinePackages(args []string) error {
 			if err != nil {
 				return fmt.Errorf("image:%s does not have a package list", id)
 			}
-			defer res.Body.Close()
+			defer func() {
+				_ = res.Body.Close()
+			}()
 			if res.StatusCode >= 400 {
 				return fmt.Errorf("image:%s does not have a package list", id)
 			}
@@ -1801,7 +1867,9 @@ func (c *config) clusterMachinePackages(args []string) error {
 			if err != nil {
 				return err
 			}
-			defer getResp.Body.Close()
+			defer func() {
+				_ = getResp.Body.Close()
+			}()
 			content, err := io.ReadAll(getResp.Body)
 			if err != nil {
 				return err
@@ -1824,7 +1892,7 @@ func (c *config) clusterMonitoringSecret(args []string) error {
 		return err
 	}
 
-	return output.New().Print(secret.Payload)
+	return c.describePrinter.Print(secret.Payload)
 }
 
 func (c *config) clusterMachineSSH(args []string, console bool) error {
@@ -1841,7 +1909,7 @@ func (c *config) clusterMachineSSH(args []string, console bool) error {
 		return err
 	}
 
-	keypair, err := c.sshKeyPair(cid)
+	keypair, err := c.sshKeyPair(cid, console, pointer.PointerOrNil(viper.GetString("reason")))
 	if err != nil {
 		return err
 	}

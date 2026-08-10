@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/fi-ts/cloud-go/api/models"
+	metalmodels "github.com/metal-stack/metal-go/api/models"
+	"github.com/metal-stack/metal-lib/pkg/pointer"
 )
 
 type (
@@ -21,12 +23,15 @@ const (
 	skull    = "\U0001F480"
 	question = "\U00002753"
 	circle   = "●"
+	VPN      = "🛡"
+	Lock     = "🔒"
+	Bark     = "🚧"
 )
 
 // Print a list of Machines in a table
 func (m MachineTablePrinter) Print(data []*models.ModelsV1MachineResponse) {
-	m.shortHeader = []string{"ID", "", "LAST EVENT", "WHEN", "STARTED", "AGE", "HOSTNAME", "IPs", "SIZE", "IMAGE", "PARTITION"}
-	m.wideHeader = []string{"ID", "", "LAST EVENT", "WHEN", "STARTED", "AGE", "HOSTNAME", "IPs", "SIZE", "IMAGE", "PARTITION"}
+	m.shortHeader = []string{"ID", "", "LAST EVENT", "WHEN", "STARTED", "AGE", "HOSTNAME", "IPs", "SIZE", "IMAGE", "PARTITION", "RACK"}
+	m.wideHeader = []string{"ID", "", "LAST EVENT", "WHEN", "STARTED", "AGE", "HOSTNAME", "IPs", "SIZE", "IMAGE", "PARTITION", "RACK"}
 	m.order = "features,hostname"
 	m.Order(data)
 	for _, machine := range data {
@@ -40,13 +45,14 @@ func (m MachineTablePrinter) Print(data []*models.ModelsV1MachineResponse) {
 		// status := strValue(machine.Liveliness)
 		var sizeID string
 		if machine.Size != nil {
-			sizeID = strValue(machine.Size.ID)
+			sizeID = pointer.SafeDeref(machine.Size.ID)
 		}
 		var partitionID string
 		if machine.Partition != nil {
-			partitionID = strValue(machine.Partition.ID)
+			partitionID = pointer.SafeDeref(machine.Partition.ID)
 		}
-		hostname := strValue(alloc.Hostname)
+
+		hostname := pointer.SafeDeref(alloc.Hostname)
 		//truncatedHostname := truncate(hostname, "...", 30)
 
 		var nwIPs []string
@@ -56,9 +62,9 @@ func (m MachineTablePrinter) Print(data []*models.ModelsV1MachineResponse) {
 		ips := strings.Join(nwIPs, "\n")
 		image := ""
 		if alloc.Image != nil {
-			image = strValue(alloc.Image.ID)
+			image = pointer.SafeDeref(alloc.Image.ID)
 		}
-		started := strValue(alloc.Created)
+		started := pointer.SafeDeref(alloc.Created)
 		age := ""
 		format := "2006-01-02T15:04:05.999Z"
 		created, err := time.Parse(format, *alloc.Created)
@@ -82,7 +88,7 @@ func (m MachineTablePrinter) Print(data []*models.ModelsV1MachineResponse) {
 			when = humanizeDuration(since)
 			lastEvent = *machine.Events.Log[0].Event
 		}
-		status := strValue(machine.Liveliness)
+		status := pointer.SafeDeref(machine.Liveliness)
 		statusEmoji := ""
 		switch status {
 		case "Alive":
@@ -94,7 +100,20 @@ func (m MachineTablePrinter) Print(data []*models.ModelsV1MachineResponse) {
 		default:
 			statusEmoji = question
 		}
-		row := []string{machineID, statusEmoji, lastEvent, when, started, age, hostname, ips, sizeID, image, partitionID}
+
+		if machine.State != nil && machine.State.Value != nil && *machine.State.Value == metalmodels.V1MachineStateValueLOCKED {
+			statusEmoji = Lock
+		}
+
+		if machine.Allocation != nil && machine.Allocation.Vpn != nil {
+			statusEmoji = VPN
+		}
+
+		if machine.State != nil && machine.State.Value != nil && *machine.State.Value == metalmodels.V1MachineStateValueRESERVED {
+			statusEmoji = Bark
+		}
+
+		row := []string{machineID, statusEmoji, lastEvent, when, started, age, hostname, ips, sizeID, image, partitionID, machine.Rackid}
 		m.addShortData(row, machine)
 		m.addWideData(row, machine)
 	}

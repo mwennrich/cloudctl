@@ -7,7 +7,10 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/fi-ts/cloud-go/api/models"
 	"github.com/fi-ts/cloudctl/cmd/helper"
+	"github.com/metal-stack/metal-lib/pkg/genericcli"
+	"github.com/metal-stack/metal-lib/pkg/pointer"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8syaml "sigs.k8s.io/yaml"
 )
@@ -23,11 +26,19 @@ type (
 	SnapshotTablePrinter struct {
 		tablePrinter
 	}
+	QoSPolicyTablePrinter struct {
+		tablePrinter
+	}
 )
 
-// Print an volume as table
+// Print a volume as table
 func (p VolumeTablePrinter) Print(data []*models.V1VolumeResponse) {
-	p.shortHeader = []string{"ID", "Name", "Size", "Usage", "PhysicalUsage", "StorageClass", "Project", "Tenant", "Partition"}
+	showStorage := hasMultipleStorageTypes(data)
+
+	p.shortHeader = []string{"ID", "Name", "Size", "Usage", "PhysicalUsage", "QoS", "Replicas", "Project", "Tenant", "Partition"}
+	if showStorage {
+		p.shortHeader = append(p.shortHeader, "Storage")
+	}
 	p.wideHeader = append(p.shortHeader, "Nodes")
 	p.Order(data)
 
@@ -42,19 +53,25 @@ func (p VolumeTablePrinter) Print(data []*models.V1VolumeResponse) {
 		}
 		size := ""
 		if vol.Size != nil {
-			size = humanize.IBytes(uint64(*vol.Size))
+			size = humanize.IBytes(uint64(*vol.Size)) // nolint:gosec
 		}
 		usage := ""
 		if vol.Statistics != nil && vol.Statistics.LogicalUsedStorage != nil {
-			usage = humanize.IBytes(uint64(*vol.Statistics.LogicalUsedStorage))
+			usage = humanize.IBytes(uint64(*vol.Statistics.LogicalUsedStorage)) // nolint:gosec
+		}
+		replica := ""
+		if vol.ReplicaCount != nil {
+			replica = fmt.Sprintf("%d", *vol.ReplicaCount)
 		}
 		physicalUsage := ""
 		if vol.Statistics != nil && vol.Statistics.PhysicalUsedStorage != nil {
 			physicalUsage = humanize.IBytes(uint64(*vol.Statistics.PhysicalUsedStorage))
 		}
-		sc := ""
-		if vol.StorageClass != nil {
-			sc = *vol.StorageClass
+		qos := ""
+		if vol.QosPolicyName != nil {
+			qos = *vol.QosPolicyName
+		} else if vol.QosPolicyUUID != nil {
+			qos = *vol.QosPolicyUUID
 		}
 		partition := ""
 		if vol.PartitionID != nil {
@@ -71,13 +88,37 @@ func (p VolumeTablePrinter) Print(data []*models.V1VolumeResponse) {
 
 		nodes := ConnectedHosts(vol)
 
-		short := []string{volumeID, name, size, usage, physicalUsage, sc, project, tenant, partition}
+		short := []string{volumeID, name, size, usage, physicalUsage, qos, replica, project, tenant, partition}
+		if showStorage {
+			storageType := ""
+			if vol.StorageType != nil {
+				storageType = *vol.StorageType
+			}
+			short = append(short, storageType)
+		}
 		wide := append(short, strings.Join(nodes, "\n"))
 
 		p.addWideData(wide, vol)
 		p.addShortData(short, vol)
 	}
 	p.render()
+}
+
+func hasMultipleStorageTypes(data []*models.V1VolumeResponse) bool {
+	seen := ""
+	for _, vol := range data {
+		if vol.StorageType == nil {
+			continue
+		}
+		if seen == "" {
+			seen = *vol.StorageType
+			continue
+		}
+		if *vol.StorageType != seen {
+			return true
+		}
+	}
+	return false
 }
 
 // Print an snapshot as table
@@ -97,7 +138,7 @@ func (p SnapshotTablePrinter) Print(data []*models.V1SnapshotResponse) {
 		}
 		size := ""
 		if snap.Size != nil {
-			size = humanize.IBytes(uint64(*snap.Size))
+			size = humanize.IBytes(uint64(*snap.Size)) // nolint:gosec
 		}
 		partition := ""
 		if snap.PartitionID != nil {
@@ -189,19 +230,24 @@ spec:
 	persistentVolumeReclaimPolicy: Delete
 	storageClassName: partition-silver
 */
-func VolumeManifest(v models.V1VolumeResponse, name, namespace string) error {
+func VolumeManifest(v models.V1VolumeResponse, name, namespace, sc string) error {
+	// Determine CSI driver based on storage type
+	csiDriver := "csi.lightbitslabs.com" // default for Duros
+	if v.StorageType != nil && *v.StorageType == "ontap" {
+		csiDriver = "csi.trident.netapp.io"
+	}
+
 	filesystem := corev1.PersistentVolumeFilesystem
 	pv := corev1.PersistentVolume{
 		TypeMeta:   v1.TypeMeta{Kind: "PersistentVolume", APIVersion: "v1"},
 		ObjectMeta: v1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: corev1.PersistentVolumeSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			VolumeMode:  &filesystem,
-			// FIXME add Capacity once figured out
-			StorageClassName: *v.StorageClass,
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			VolumeMode:       &filesystem,
+			StorageClassName: sc,
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
 				CSI: &corev1.CSIPersistentVolumeSource{
-					Driver:       "csi.lightbitslabs.com",
+					Driver:       csiDriver,
 					FSType:       "ext4",
 					ReadOnly:     false,
 					VolumeHandle: *v.VolumeHandle,
@@ -209,10 +255,15 @@ func VolumeManifest(v models.V1VolumeResponse, name, namespace string) error {
 			},
 		},
 	}
+	if v.Size != nil {
+		pv.Spec.Capacity = corev1.ResourceList{
+			corev1.ResourceStorage: *resource.NewQuantity(*v.Size, resource.BinarySI),
+		}
+	}
 
 	if len(v.ConnectedHosts) > 0 {
 		nodes := ConnectedHosts(&v)
-		fmt.Printf("# be cautios! at the time being your volume:%s is still attached to worker node:%s, you can not mount it twice\n", *v.VolumeID, strings.Join(nodes, ","))
+		fmt.Printf("# be cautious! at the time being your volume:%s is still attached to worker node:%s, you can not mount it twice\n", *v.VolumeID, strings.Join(nodes, ","))
 	}
 
 	helper.MustPrintKubernetesResource(pv)
@@ -254,29 +305,29 @@ func (p VolumeClusterInfoTablePrinter) Print(data []*models.V1StorageClusterInfo
 			continue
 		}
 
-		partition := strValue(info.Partition)
-		health := strValue(info.Health.State)
-		numdegradedvolumes := int64Value(info.Health.NumDegradedVolumes)
-		numnotavailablevolumes := int64Value(info.Health.NumNotAvailableVolumes)
-		numreadonlyvolumes := int64Value(info.Health.NumReadOnlyVolumes)
-		numinactivenodes := int64Value(info.Health.NumInactiveNodes)
+		partition := pointer.SafeDeref(info.Partition)
+		health := pointer.SafeDeref(info.Health.State)
+		numdegradedvolumes := pointer.SafeDeref(info.Health.NumDegradedVolumes)
+		numnotavailablevolumes := pointer.SafeDeref(info.Health.NumNotAvailableVolumes)
+		numreadonlyvolumes := pointer.SafeDeref(info.Health.NumReadOnlyVolumes)
+		numinactivenodes := pointer.SafeDeref(info.Health.NumInactiveNodes)
 
 		compressionratio := ""
 		if info.Statistics != nil && info.Statistics.CompressionRatio != nil {
 			ratio := *info.Statistics.CompressionRatio
 			compressionratio = fmt.Sprintf("%d%%", int(100.0*(1-ratio)))
 		}
-		effectivephysicalstorage := helper.HumanizeSize(int64Value(info.Statistics.EffectivePhysicalStorage))
-		freephysicalstorage := helper.HumanizeSize(int64Value(info.Statistics.FreePhysicalStorage))
-		physicalusedstorage := helper.HumanizeSize(int64Value(info.Statistics.PhysicalUsedStorage))
+		effectivephysicalstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.EffectivePhysicalStorage))
+		freephysicalstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.FreePhysicalStorage))
+		physicalusedstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.PhysicalUsedStorage))
 
-		estimatedfreelogicalstorage := helper.HumanizeSize(int64Value(info.Statistics.EstimatedFreeLogicalStorage))
-		estimatedlogicalstorage := helper.HumanizeSize(int64Value(info.Statistics.EstimatedLogicalStorage))
-		logicalstorage := helper.HumanizeSize(int64Value(info.Statistics.LogicalStorage))
-		logicalusedstorage := helper.HumanizeSize(int64Value(info.Statistics.LogicalUsedStorage))
-		installedphysicalstorage := helper.HumanizeSize(int64Value(info.Statistics.InstalledPhysicalStorage))
-		managedphysicalstorage := helper.HumanizeSize(int64Value(info.Statistics.ManagedPhysicalStorage))
-		// physicalusedstorageincludingparity := helper.HumanizeSize(int64Value(info.Statistics.PhysicalUsedStorageIncludingParity))
+		estimatedfreelogicalstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.EstimatedFreeLogicalStorage))
+		estimatedlogicalstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.EstimatedLogicalStorage))
+		logicalstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.LogicalStorage))
+		logicalusedstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.LogicalUsedStorage))
+		installedphysicalstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.InstalledPhysicalStorage))
+		managedphysicalstorage := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.ManagedPhysicalStorage))
+		// physicalusedstorageincludingparity := helper.HumanizeSize(pointer.SafeDeref(info.Statistics.PhysicalUsedStorageIncludingParity))
 
 		version := "n/a"
 		if info.MinVersionInCluster != nil {
@@ -298,6 +349,72 @@ func (p VolumeClusterInfoTablePrinter) Print(data []*models.V1StorageClusterInfo
 
 		p.addWideData(wide, info)
 		p.addShortData(short, info)
+	}
+	p.render()
+}
+
+// Print a QoS Policy as table
+func (p QoSPolicyTablePrinter) Print(data []*models.V1QoSPolicyResponse) {
+	p.shortHeader = []string{"ID", "Name", "Partition", "Description", "State", "Read", "Write"}
+	p.wideHeader = p.shortHeader
+
+	for _, qos := range data {
+		id := ""
+		if qos.QoSPolicyID != nil {
+			id = *qos.QoSPolicyID
+		}
+		name := ""
+		if qos.Name != nil {
+			name = *qos.Name
+		}
+		partition := ""
+		if qos.Partition != nil {
+			partition = *qos.Partition
+		}
+		description := ""
+		longDescription := ""
+		if qos.Description != nil {
+			longDescription = *qos.Description
+			description = genericcli.TruncateEnd(*qos.Description, 40)
+		}
+		state := ""
+		if qos.State != nil {
+			state = *qos.State
+		}
+		read := ""
+		write := ""
+		if qos.Limit != nil {
+			if l := qos.Limit.Bandwidth; l != nil {
+				if l.Read != nil {
+					read = fmt.Sprintf("%d MB/s", *l.Read)
+				}
+				if l.Write != nil {
+					write = fmt.Sprintf("%d MB/s", *l.Write)
+				}
+			}
+			if l := qos.Limit.IOPS; l != nil {
+				if l.Read != nil {
+					read = fmt.Sprintf("%d IOPS", *l.Read)
+				}
+				if l.Write != nil {
+					write = fmt.Sprintf("%d IOPS", *l.Write)
+				}
+			}
+			if l := qos.Limit.IOPSPerGB; l != nil {
+				if l.Read != nil {
+					read = fmt.Sprintf("%d IOPS/GB", *l.Read)
+				}
+				if l.Write != nil {
+					write = fmt.Sprintf("%d IOPS/GB", *l.Write)
+				}
+			}
+		}
+
+		short := []string{id, name, partition, description, state, read, write}
+		wide := []string{id, name, partition, longDescription, state, read, write}
+
+		p.addWideData(wide, wide)
+		p.addShortData(short, qos)
 	}
 	p.render()
 }

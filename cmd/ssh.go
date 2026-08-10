@@ -16,9 +16,13 @@ func (c *config) firewallSSHViaVPN(firewallID string, privateKey []byte, vpn *mo
 	if err != nil {
 		return err
 	}
-	defer v.Close()
+	defer func() {
+		_ = v.Close()
+	}()
 
-	s, err := metalssh.NewClientWithConnection("metal", v.TargetIP, privateKey, v.Conn)
+	opts := []metalssh.ConnectOpt{metalssh.ConnectOptOutputPrivateKey(privateKey)}
+
+	s, err := metalssh.NewClientWithConnection("metal", v.TargetIP, v.Conn, opts...)
 	if err != nil {
 		return err
 	}
@@ -26,7 +30,9 @@ func (c *config) firewallSSHViaVPN(firewallID string, privateKey []byte, vpn *mo
 }
 
 func (c *config) sshClient(user, host string, privateKey []byte, port int, idToken *string) error {
-	s, err := metalssh.NewClient(user, host, privateKey, port)
+	opts := []metalssh.ConnectOpt{metalssh.ConnectOptOutputPrivateKey(privateKey)}
+
+	s, err := metalssh.NewClient(user, host, port, opts...)
 	if err != nil {
 		return err
 	}
