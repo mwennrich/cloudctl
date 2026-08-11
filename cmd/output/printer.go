@@ -196,6 +196,7 @@ func newTablePrinter(format, order string, noHeaders bool, writer io.Writer) *ta
 		order:     order,
 		noHeaders: noHeaders,
 		outWriter: writer,
+		template:  template,
 	}
 	if format == "wide" {
 		tp.wide = true
