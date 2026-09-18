@@ -183,6 +183,10 @@ func shootData(shoot *models.V1ClusterResponse, withIssues bool) ([]string, []st
 		shootStats.nodes += "💩"
 	}
 
+	if shoot.QCAConfig != nil && shoot.QCAConfig.Disabled != nil && !*shoot.QCAConfig.Disabled {
+		shootStats.nodes += "🤮"
+	}
+
 	maintainEmoji := ""
 	var issues []string
 
