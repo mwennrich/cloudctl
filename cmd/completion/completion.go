@@ -1,8 +1,11 @@
 package completion
 
 import (
+	"slices"
 	"sort"
+	"strconv"
 
+	accountingv1 "github.com/fi-ts/accounting-go/pkg/apis/v1"
 	"github.com/fi-ts/cloud-go/api/client"
 	"github.com/fi-ts/cloud-go/api/client/cluster"
 	"github.com/fi-ts/cloud-go/api/client/database"
@@ -17,7 +20,13 @@ import (
 )
 
 var (
-	ClusterPurposes     = []string{"production", "development", "evaluation", "infrastructure"}
+	ClusterPurposes            = []string{"production", "development", "evaluation", "infrastructure"}
+	ClusterReconcileOperations = []string{
+		models.V1ClusterReconcileRequestOperationReconcile,
+		models.V1ClusterReconcileRequestOperationRetry,
+		models.V1ClusterReconcileRequestOperationMaintain,
+		models.V1ClusterReconcileRequestOperationRotateDashSSHDashKeypair,
+	}
 	PodSecurityDefaults = []string{
 		models.V1KubernetesDefaultPodSecurityStandardRestricted,
 		models.V1KubernetesDefaultPodSecurityStandardBaseline,
@@ -30,10 +39,8 @@ type Completion struct {
 	cloud *client.CloudAPI
 }
 
-func NewCompletion(cloud *client.CloudAPI) *Completion {
-	return &Completion{
-		cloud: cloud,
-	}
+func (c *Completion) SetClient(client *client.CloudAPI) {
+	c.cloud = client
 }
 
 func (c *Completion) ContextListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -127,6 +134,44 @@ func (c *Completion) clusterMachineListCompletion(clusterIDs []string, includeMa
 	return machines, cobra.ShellCompDirectiveNoFileComp
 }
 
+func (c *Completion) ClusterStorageClassListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 1 {
+		return []string{"no clusterid given"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	clusterID := args[0]
+
+	resp, err := c.cloud.Cluster.FindCluster(cluster.NewFindClusterParams().WithID(clusterID).WithReturnMachines(new(false)), nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	constraintsResp, err := c.cloud.Cluster.ListConstraints(cluster.NewListConstraintsParams(), nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var storageClasses []string
+
+	if slices.ContainsFunc(constraintsResp.Payload.Networks, func(n *models.V1Network) bool {
+		if !n.DefaultPartitionStorage {
+			return false
+		}
+		return slices.Contains(resp.Payload.AdditionalNetworks, *n.ID)
+	}) {
+		storageClasses = append(storageClasses, "partition-silver", "partition-gold", "partition-gold-encrypted")
+	}
+
+	if disabled, err := strconv.ParseBool(pointer.SafeDeref(resp.Payload.ClusterFeatures.DisableCsiLvm)); err == nil && !disabled {
+		storageClasses = append(storageClasses, "csi-lvm")
+	}
+	if enabled, err := strconv.ParseBool(pointer.SafeDeref(resp.Payload.ClusterFeatures.EnableCsiDriverLvm)); err == nil && enabled {
+		storageClasses = append(storageClasses, "csi-driver-lvm-linear", "csi-driver-lvm-mirror", "csi-driver-lvm-striped", "csi-lvm")
+	}
+
+	return storageClasses, cobra.ShellCompDirectiveNoFileComp
+}
+
 func (c *Completion) ProjectListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	request := project.NewListProjectsParams()
 	response, err := c.cloud.Project.ListProjects(request, nil)
@@ -149,6 +194,38 @@ func (c *Completion) PartitionListCompletion(cmd *cobra.Command, args []string, 
 	}
 	sort.Strings(sc.Payload.Partitions)
 	return sc.Payload.Partitions, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (c *Completion) PolicyIDListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	request := volume.NewListPoliciesParams()
+	sc, err := c.cloud.Volume.ListPolicies(request, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	policyids := make([]string, 0, len(sc.Payload))
+	for _, policy := range sc.Payload {
+		if policy.QoSPolicyID == nil {
+			continue
+		}
+		policyids = append(policyids, *policy.QoSPolicyID)
+	}
+	return policyids, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (c *Completion) PolicyNameListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	request := volume.NewListPoliciesParams()
+	sc, err := c.cloud.Volume.ListPolicies(request, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	policyNames := make([]string, 0, len(sc.Payload))
+	for _, policy := range sc.Payload {
+		if policy.Name == nil {
+			continue
+		}
+		policyNames = append(policyNames, *policy.Name)
+	}
+	return policyNames, cobra.ShellCompDirectiveNoFileComp
 }
 
 func (c *Completion) SeedListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -194,7 +271,7 @@ func (c *Completion) VolumeListCompletion(cmd *cobra.Command, args []string, toC
 		if v.VolumeID == nil {
 			continue
 		}
-		names = append(names, *v.VolumeID)
+		names = append(names, *v.VolumeID+"\t"+pointer.SafeDeref(v.VolumeName))
 	}
 	sort.Strings(names)
 	return names, cobra.ShellCompDirectiveDefault
@@ -209,7 +286,6 @@ func (c *Completion) NetworkListCompletion(cmd *cobra.Command, args []string, to
 
 	var names []string
 	for _, n := range sc.Payload.Networks {
-		n := n
 		if n.ID == nil {
 			continue
 		}
@@ -272,6 +348,31 @@ func (c *Completion) FirewallImageListCompletion(cmd *cobra.Command, args []stri
 	}
 	sort.Strings(sc.Payload.FirewallImages)
 	return sc.Payload.FirewallImages, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (c *Completion) SizeListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	request := cluster.NewListConstraintsParams()
+	sc, err := c.cloud.Cluster.ListConstraints(request, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	sizeMap := map[string]bool{}
+	for _, t := range sc.Payload.MachineTypes {
+		sizeMap[t] = true
+	}
+	for _, t := range sc.Payload.FirewallTypes {
+		sizeMap[t] = true
+	}
+
+	var sizes []string
+	for size := range sizeMap {
+		sizes = append(sizes, size)
+	}
+
+	sort.Strings(sizes)
+
+	return sizes, cobra.ShellCompDirectiveNoFileComp
 }
 
 func (c *Completion) FirewallControllerVersionListCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -343,4 +444,39 @@ func (c *Completion) PostgresListCompletion(cmd *cobra.Command, args []string, t
 	}
 	sort.Strings(names)
 	return names, cobra.ShellCompDirectiveNoFileComp
+}
+func (c *Completion) PostgresListStorageClassesCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	request := database.NewGetPostgresPartitionsParams()
+	response, err := c.cloud.Database.GetPostgresPartitions(request, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	// get the value of the partition flag, if provided
+	partitionName, _ := cmd.Flags().GetString("partition")
+
+	var scs []string
+	for n, pp := range response.Payload {
+		for sc := range pp.AllowedStorageClasses {
+			if partitionName != "" && partitionName != n {
+				// when the partion flag was provided, ignore storage classes of other postgres partitions
+				continue
+			}
+			scs = append(scs, sc)
+		}
+	}
+	sort.Strings(scs)
+	return scs, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (c *Completion) ProductOptionsCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	var options []string
+	for o, v := range accountingv1.ProductOption_value {
+		if v == 0 {
+			continue
+		}
+		options = append(options, o)
+	}
+	sort.Strings(options)
+	return options, cobra.ShellCompDirectiveNoFileComp
 }

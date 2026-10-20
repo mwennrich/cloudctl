@@ -154,7 +154,7 @@ func (s ShootTablePrinter) Order(data []*models.V1ClusterResponse) {
 					if err != nil {
 						return false
 					}
-					btime, _ := time.Parse(time.RFC3339, *B.Status.LastOperation.LastUpdateTime)
+					btime, err := time.Parse(time.RFC3339, *B.Status.LastOperation.LastUpdateTime)
 					if err != nil {
 						return true
 					}
@@ -296,7 +296,7 @@ func (s ProjectTablePrinter) Order(data []*models.V1ProjectResponse) {
 }
 
 // Order clusterUsage
-func (s *ClusterBillingTablePrinter) Order(data []*models.V1ClusterUsage) {
+func (s ClusterBillingTablePrinter) Order(data []*models.V1ClusterUsage) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {
 		sort.SliceStable(data, func(i, j int) bool {
@@ -393,8 +393,178 @@ func (s *ClusterBillingTablePrinter) Order(data []*models.V1ClusterUsage) {
 	}
 }
 
+// Order machineUsage
+func (s MachineBillingTablePrinter) Order(data []*models.V1MachineUsage) {
+	cols := strings.Split(s.order, ",")
+	if len(cols) > 0 {
+		sort.SliceStable(data, func(i, j int) bool {
+			A := data[i]
+			B := data[j]
+			for _, order := range cols {
+				order = strings.ToLower(order)
+				switch order {
+				case "tenant":
+					if A.Tenant == nil {
+						return true
+					}
+					if B.Tenant == nil {
+						return false
+					}
+					if *A.Tenant < *B.Tenant {
+						return true
+					}
+					if *A.Tenant != *B.Tenant {
+						return false
+					}
+				case "project":
+					if A.Projectname == nil {
+						return true
+					}
+					if B.Projectname == nil {
+						return false
+					}
+					if *A.Projectname < *B.Projectname {
+						return true
+					}
+					if *A.Projectname != *B.Projectname {
+						return false
+					}
+				case "partition":
+					if A.Partition == nil {
+						return true
+					}
+					if B.Partition == nil {
+						return false
+					}
+					if *A.Partition < *B.Partition {
+						return true
+					}
+					if *A.Partition != *B.Partition {
+						return false
+					}
+				case "name":
+					if A.Machinename == nil {
+						return true
+					}
+					if B.Machinename == nil {
+						return false
+					}
+					if *A.Machinename < *B.Machinename {
+						return true
+					}
+					if *A.Machinename != *B.Machinename {
+						return false
+					}
+				case "id":
+					if A.Machineid == nil {
+						return true
+					}
+					if B.Machineid == nil {
+						return false
+					}
+					if *A.Machineid < *B.Machineid {
+						return true
+					}
+					if *A.Machineid != *B.Machineid {
+						return false
+					}
+				case "lifetime":
+					if A.Lifetime == nil {
+						return true
+					}
+					if B.Lifetime == nil {
+						return false
+					}
+					aseconds := int64(*A.Lifetime)
+					bseconds := int64(*B.Lifetime)
+					if aseconds < bseconds {
+						return true
+					}
+					if aseconds != bseconds {
+						return false
+					}
+				}
+			}
+
+			return false
+		})
+	}
+}
+
+// Order productOptionUsage
+func (s ProductOptionBillingTablePrinter) Order(data []*models.V1ProductOptionUsage) {
+	cols := strings.Split(s.order, ",")
+	if len(cols) > 0 {
+		sort.SliceStable(data, func(i, j int) bool {
+			A := data[i]
+			B := data[j]
+			for _, order := range cols {
+				order = strings.ToLower(order)
+				switch order {
+				case "tenant":
+					if A.Tenant == nil {
+						return true
+					}
+					if B.Tenant == nil {
+						return false
+					}
+					if *A.Tenant < *B.Tenant {
+						return true
+					}
+					if *A.Tenant != *B.Tenant {
+						return false
+					}
+				case "project":
+					if A.Projectname == nil {
+						return true
+					}
+					if B.Projectname == nil {
+						return false
+					}
+					if *A.Projectname < *B.Projectname {
+						return true
+					}
+					if *A.Projectname != *B.Projectname {
+						return false
+					}
+				case "id":
+					if A.ID == nil {
+						return true
+					}
+					if B.ID == nil {
+						return false
+					}
+					if *A.ID < *B.ID {
+						return true
+					}
+					if *A.ID != *B.ID {
+						return false
+					}
+				case "lifetime":
+					if A.Lifetime == nil {
+						return true
+					}
+					if B.Lifetime == nil {
+						return false
+					}
+					aseconds := int64(*A.Lifetime)
+					bseconds := int64(*B.Lifetime)
+					if aseconds < bseconds {
+						return true
+					}
+					if aseconds != bseconds {
+						return false
+					}
+				}
+			}
+
+			return false
+		})
+	}
+}
+
 // Order s3Usage
-func (s *S3BillingTablePrinter) Order(data []*models.V1S3Usage) {
+func (s S3BillingTablePrinter) Order(data []*models.V1S3Usage) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {
 		sort.SliceStable(data, func(i, j int) bool {
@@ -505,7 +675,7 @@ func (s *S3BillingTablePrinter) Order(data []*models.V1S3Usage) {
 }
 
 // Order containerUsage
-func (s *ContainerBillingTablePrinter) Order(data []*models.V1ContainerUsage) {
+func (s ContainerBillingTablePrinter) Order(data []*models.V1ContainerUsage) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {
 		sort.SliceStable(data, func(i, j int) bool {
@@ -656,7 +826,7 @@ func (s *ContainerBillingTablePrinter) Order(data []*models.V1ContainerUsage) {
 }
 
 // Order ipUsage
-func (s *IPBillingTablePrinter) Order(data []*models.V1IPUsage) {
+func (s IPBillingTablePrinter) Order(data []*models.V1IPUsage) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {
 		sort.SliceStable(data, func(i, j int) bool {
@@ -736,7 +906,7 @@ func (s *IPBillingTablePrinter) Order(data []*models.V1IPUsage) {
 }
 
 // Order volumeUsage
-func (s *NetworkTrafficBillingTablePrinter) Order(data []*models.V1NetworkUsage) {
+func (s NetworkTrafficBillingTablePrinter) Order(data []*models.V1NetworkUsage) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {
 		sort.SliceStable(data, func(i, j int) bool {
@@ -834,7 +1004,7 @@ func (s *NetworkTrafficBillingTablePrinter) Order(data []*models.V1NetworkUsage)
 }
 
 // Order volumeUsage
-func (s *VolumeBillingTablePrinter) Order(data []*models.V1VolumeUsage) {
+func (s VolumeBillingTablePrinter) Order(data []*models.V1VolumeUsage) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {
 		sort.SliceStable(data, func(i, j int) bool {
@@ -932,7 +1102,7 @@ func (s *VolumeBillingTablePrinter) Order(data []*models.V1VolumeUsage) {
 }
 
 // Order ipUsage
-func (s *PostgresBillingTablePrinter) Order(data []*models.V1PostgresUsage) {
+func (s PostgresBillingTablePrinter) Order(data []*models.V1PostgresUsage) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {
 		sort.SliceStable(data, func(i, j int) bool {
@@ -1109,7 +1279,7 @@ func (p PostgresBackupEntryTablePrinter) Order(data []*models.V1PostgresBackupEn
 	}
 }
 
-// Order cluster
+// Order volume
 func (s VolumeTablePrinter) Order(data []*models.V1VolumeResponse) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {
@@ -1171,7 +1341,7 @@ func (s VolumeTablePrinter) Order(data []*models.V1VolumeResponse) {
 	}
 }
 
-// Order cluster
+// Order snapshot
 func (s SnapshotTablePrinter) Order(data []*models.V1SnapshotResponse) {
 	cols := strings.Split(s.order, ",")
 	if len(cols) > 0 {

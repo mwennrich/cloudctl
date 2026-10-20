@@ -1,6 +1,8 @@
 package output
 
 import (
+	"maps"
+	"slices"
 	"sort"
 
 	"github.com/fi-ts/cloud-go/api/models"
@@ -33,7 +35,7 @@ func (p HealthTablePrinter) Print(health *models.RestHealthResponse) {
 	p.render()
 }
 
-func (p HealthTablePrinter) PrintServices(services map[string]models.RestHealthResult) {
+func (p HealthTablePrinter) PrintServices(services map[string]models.RestHealthResponse) {
 	p.wideHeader = []string{"Service", "Status", "Message"}
 	p.shortHeader = p.wideHeader
 
@@ -58,6 +60,33 @@ func (p HealthTablePrinter) PrintServices(services map[string]models.RestHealthR
 		wide := []string{name, status, msg}
 		p.addWideData(wide, s)
 		p.addShortData(wide, s)
+
+		i := 0
+		skeys := maps.Keys(s.Services)
+		sortedServiceKeys := slices.Collect(skeys)
+		slices.Sort(sortedServiceKeys)
+		for _, sname := range sortedServiceKeys {
+			sresult := s.Services[sname]
+			prefix := "├"
+			if i == len(s.Services)-1 {
+				prefix = "└"
+			}
+			prefix += "─╴"
+
+			status := "unknown"
+			if sresult.Status != nil && *sresult.Status != "" {
+				status = *sresult.Status
+			}
+			msg := ""
+			if sresult.Message != nil && *sresult.Message != "" {
+				msg = *s.Message
+			}
+
+			wide := []string{prefix + sname, status, msg}
+			p.addWideData(wide, s)
+			p.addShortData(wide, s)
+			i++
+		}
 	}
 
 	p.render()

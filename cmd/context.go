@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/fatih/color"
-	"github.com/fi-ts/cloudctl/cmd/output"
 	"github.com/fi-ts/cloudctl/pkg/api"
 	"github.com/spf13/cobra"
 )
@@ -42,7 +41,6 @@ contexts:
 			}
 			return nil
 		},
-		PreRun: bindPFlags,
 	}
 
 	contextShortCmd := &cobra.Command{
@@ -51,7 +49,6 @@ contexts:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return contextShort()
 		},
-		PreRun: bindPFlags,
 	}
 
 	contextCmd.AddCommand(contextShortCmd)
@@ -113,5 +110,5 @@ func (c *config) contextList() error {
 	if err != nil {
 		return err
 	}
-	return output.New().Print(ctxs)
+	return c.listPrinter.Print(ctxs)
 }
